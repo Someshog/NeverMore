@@ -10,6 +10,8 @@ import android.webkit.WebView
 import android.widget.FrameLayout
 import androidx.activity.ComponentActivity
 import android.graphics.Color
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
 
 class TvWebViewActivity : ComponentActivity() {
     private lateinit var webView: WebView
@@ -86,6 +88,19 @@ class TvWebViewActivity : ComponentActivity() {
         rootLayout.addView(webView)
         setContentView(rootLayout)
         BraveEngine.initializeBraveShields(applicationContext)
+
+        // Inject the ad-pruning script BEFORE any YouTube script runs. evaluateJavascript in
+        // onPageStarted is too late: the player has already requested/parsed its ad data by then.
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+            val adPruneJs = assets.open("yt_adblock.js").bufferedReader().use { it.readText() }
+            WebViewCompat.addDocumentStartJavaScript(
+                webView,
+                adPruneJs,
+                setOf("https://www.youtube.com", "https://youtube.com", "https://m.youtube.com")
+            )
+        } else {
+            android.util.Log.w("BraveTv", "DOCUMENT_START_SCRIPT unsupported on this WebView; update Android System WebView")
+        }
         webView.loadUrl(url)
     }
 

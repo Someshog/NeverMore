@@ -86,6 +86,9 @@ class AdBlockWebViewClient : WebViewClient() {
         // Use sourcePageUrl (a @Volatile field updated safely on any thread) instead.
         val sourceUrl = if (request.isForMainFrame) url else sourcePageUrl ?: url
         val resourceType = resourceType(request)
+        if (!request.isForMainFrame && isYouTubeAdUrl(url)) {
+            return emptyResponse()
+        }
         if (!request.isForMainFrame && !isYouTubeEssentialUrl(url) && BraveEngine.shouldBlockUrl(url, sourceUrl, resourceType)) {
             android.util.Log.d("BraveTv", "BLOCKED: $url")
             return emptyResponse()
@@ -131,6 +134,16 @@ class AdBlockWebViewClient : WebViewClient() {
             connection.disconnect()
         }
     }
+
+    /** YouTube's own ad serving/tracking endpoints. These live on youtube.com so generic lists miss them. */
+    private fun isYouTubeAdUrl(url: String): Boolean =
+        "youtube.com/pagead/" in url ||
+            "youtube.com/api/stats/ads" in url ||
+            "youtube.com/ptracking" in url ||
+            "youtube.com/api/stats/atr" in url ||
+            "doubleclick.net" in url ||
+            "googleadservices.com" in url ||
+            "googlesyndication.com" in url
 
     private fun emptyResponse() = WebResourceResponse(
         "text/plain", "UTF-8", 204, "Blocked",

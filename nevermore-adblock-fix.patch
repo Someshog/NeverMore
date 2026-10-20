@@ -1,0 +1,214 @@
+diff --git a/app/build.gradle.kts b/app/build.gradle.kts
+index 2a418db..c9cb7cd 100644
+--- a/app/build.gradle.kts
++++ b/app/build.gradle.kts
+@@ -27,6 +27,7 @@ android {
+ 
+ dependencies {
+     implementation("androidx.core:core-ktx:1.13.1")
++    implementation("androidx.webkit:webkit:1.11.0")
+     implementation("androidx.activity:activity-compose:1.9.1")
+     implementation(platform("androidx.compose:compose-bom:2024.06.00"))
+     implementation("androidx.compose.ui:ui")
+diff --git a/app/src/main/assets/yt_adblock.js b/app/src/main/assets/yt_adblock.js
+new file mode 100644
+index 0000000..5d458dd
+--- /dev/null
++++ b/app/src/main/assets/yt_adblock.js
+@@ -0,0 +1,132 @@
++/*
++ * Runs at document start (before YouTube's own scripts) and strips ad data out of
++ * YouTube API responses so the player never receives any ads to play.
++ * Same idea as uBlock Origin's json-prune / json-prune-fetch-response / set-constant scriptlets.
++ */
++(function () {
++  if (window.__ytAdPruneInstalled) return;
++  window.__ytAdPruneInstalled = true;
++
++  var AD_KEYS = ['adPlacements', 'playerAds', 'adSlots', 'adBreakHeartbeatParams'];
++  var AD_ITEM_KEYS = ['adSlotRenderer', 'promotedSparklesWebRenderer', 'displayAdRenderer', 'compactPromotedVideoRenderer'];
++  var API_RE = /\/youtubei\/v1\/(player|next|browse|get_watch|reel\/reel_item_watch|search)/;
++
++  function prune(node, depth) {
++    if (!node || typeof node !== 'object' || depth > 8) return node;
++    if (Array.isArray(node)) {
++      for (var i = node.length - 1; i >= 0; i--) {
++        var item = node[i];
++        if (item && typeof item === 'object' && hasAdItem(item)) {
++          node.splice(i, 1);
++        } else {
++          prune(item, depth + 1);
++        }
++      }
++      return node;
++    }
++    for (var k = 0; k < AD_KEYS.length; k++) {
++      if (AD_KEYS[k] in node) {
++        try { delete node[AD_KEYS[k]]; } catch (e) { node[AD_KEYS[k]] = undefined; }
++      }
++    }
++    for (var key in node) {
++      if (Object.prototype.hasOwnProperty.call(node, key)) prune(node[key], depth + 1);
++    }
++    return node;
++  }
++
++  function hasAdItem(item) {
++    for (var i = 0; i < AD_ITEM_KEYS.length; i++) {
++      if (AD_ITEM_KEYS[i] in item) return true;
++      // renderers are often wrapped one level down, e.g. {richItemRenderer:{content:{adSlotRenderer:{}}}}
++      var inner = item.richItemRenderer && item.richItemRenderer.content;
++      if (inner && AD_ITEM_KEYS[i] in inner) return true;
++    }
++    return false;
++  }
++
++  function looksLikePlayerData(obj) {
++    return obj && typeof obj === 'object' &&
++      (obj.streamingData || obj.playabilityStatus || obj.adPlacements || obj.playerAds || obj.contents || obj.playerResponse);
++  }
++
++  // 1. JSON.parse (covers pages that parse the response text themselves)
++  var origParse = JSON.parse;
++  JSON.parse = function () {
++    var result = origParse.apply(this, arguments);
++    try { if (looksLikePlayerData(result)) prune(result, 0); } catch (e) {}
++    return result;
++  };
++
++  // 2. fetch (covers Response.json(), which does NOT go through JSON.parse)
++  var origFetch = window.fetch;
++  if (origFetch) {
++    window.fetch = function (input, init) {
++      var url = typeof input === 'string' ? input : (input && input.url) || '';
++      var p = origFetch.apply(this, arguments);
++      if (!API_RE.test(url)) return p;
++      return p.then(function (res) {
++        try {
++          return res.clone().text().then(function (text) {
++            var data;
++            try { data = origParse(text); } catch (e) { return res; }
++            prune(data, 0);
++            var headers = new Headers(res.headers);
++            headers.delete('content-length');
++            return new Response(JSON.stringify(data), { status: res.status, statusText: res.statusText, headers: headers });
++          });
++        } catch (e) { return res; }
++      });
++    };
++  }
++
++  // 3. XMLHttpRequest (YouTube TV historically uses XHR for some calls)
++  var xhrOpen = XMLHttpRequest.prototype.open;
++  XMLHttpRequest.prototype.open = function (method, url) {
++    this.__ytUrl = String(url || '');
++    return xhrOpen.apply(this, arguments);
++  };
++  ['response', 'responseText'].forEach(function (prop) {
++    var desc = Object.getOwnPropertyDescriptor(XMLHttpRequest.prototype, prop);
++    if (!desc || !desc.get) return;
++    Object.defineProperty(XMLHttpRequest.prototype, prop, {
++      configurable: true,
++      get: function () {
++        var value = desc.get.call(this);
++        if (!this.__ytUrl || !API_RE.test(this.__ytUrl) || typeof value !== 'string' || !value) return value;
++        try {
++          var data = origParse(value);
++          prune(data, 0);
++          return JSON.stringify(data);
++        } catch (e) { return value; }
++      }
++    });
++  });
++
++  // 4. Initial player response embedded in the page HTML
++  ['ytInitialPlayerResponse', 'ytInitialData'].forEach(function (name) {
++    var stored;
++    try {
++      Object.defineProperty(window, name, {
++        configurable: true,
++        get: function () { return stored; },
++        set: function (v) { try { prune(v, 0); } catch (e) {} stored = v; }
++      });
++    } catch (e) {}
++  });
++
++  // 5. Fallback for anything that still slips through: skip the ad at the player level.
++  function skipFallback() {
++    var video = document.querySelector('video');
++    var player = document.getElementById('movie_player') || document.querySelector('.html5-video-player');
++    var adShowing = player && (player.classList.contains('ad-showing') || player.classList.contains('ad-interrupting'));
++    if (video && adShowing && isFinite(video.duration) && video.duration > 0) {
++      video.muted = true;
++      video.playbackRate = 16;
++      video.currentTime = video.duration;
++    }
++    var skip = document.querySelector('.ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-ad-skip-button-modern');
++    if (skip && skip.offsetParent !== null) skip.click();
++  }
++  setInterval(skipFallback, 250);
++})();
+diff --git a/app/src/main/java/com/bravetv/app/AdBlockWebViewClient.kt b/app/src/main/java/com/bravetv/app/AdBlockWebViewClient.kt
+index 0ed4127..413c540 100644
+--- a/app/src/main/java/com/bravetv/app/AdBlockWebViewClient.kt
++++ b/app/src/main/java/com/bravetv/app/AdBlockWebViewClient.kt
+@@ -86,6 +86,9 @@ class AdBlockWebViewClient : WebViewClient() {
+         // Use sourcePageUrl (a @Volatile field updated safely on any thread) instead.
+         val sourceUrl = if (request.isForMainFrame) url else sourcePageUrl ?: url
+         val resourceType = resourceType(request)
++        if (!request.isForMainFrame && isYouTubeAdUrl(url)) {
++            return emptyResponse()
++        }
+         if (!request.isForMainFrame && !isYouTubeEssentialUrl(url) && BraveEngine.shouldBlockUrl(url, sourceUrl, resourceType)) {
+             android.util.Log.d("BraveTv", "BLOCKED: $url")
+             return emptyResponse()
+@@ -132,6 +135,16 @@ class AdBlockWebViewClient : WebViewClient() {
+         }
+     }
+ 
++    /** YouTube's own ad serving/tracking endpoints. These live on youtube.com so generic lists miss them. */
++    private fun isYouTubeAdUrl(url: String): Boolean =
++        "youtube.com/pagead/" in url ||
++            "youtube.com/api/stats/ads" in url ||
++            "youtube.com/ptracking" in url ||
++            "youtube.com/api/stats/atr" in url ||
++            "doubleclick.net" in url ||
++            "googleadservices.com" in url ||
++            "googlesyndication.com" in url
++
+     private fun emptyResponse() = WebResourceResponse(
+         "text/plain", "UTF-8", 204, "Blocked",
+         mapOf("Cache-Control" to "no-store"), ByteArrayInputStream(ByteArray(0))
+diff --git a/app/src/main/java/com/bravetv/app/TvWebViewActivity.kt b/app/src/main/java/com/bravetv/app/TvWebViewActivity.kt
+index b66d430..e61106e 100644
+--- a/app/src/main/java/com/bravetv/app/TvWebViewActivity.kt
++++ b/app/src/main/java/com/bravetv/app/TvWebViewActivity.kt
+@@ -10,6 +10,8 @@ import android.webkit.WebView
+ import android.widget.FrameLayout
+ import androidx.activity.ComponentActivity
+ import android.graphics.Color
++import androidx.webkit.WebViewCompat
++import androidx.webkit.WebViewFeature
+ 
+ class TvWebViewActivity : ComponentActivity() {
+     private lateinit var webView: WebView
+@@ -86,6 +88,19 @@ class TvWebViewActivity : ComponentActivity() {
+         rootLayout.addView(webView)
+         setContentView(rootLayout)
+         BraveEngine.initializeBraveShields(applicationContext)
++
++        // Inject the ad-pruning script BEFORE any YouTube script runs. evaluateJavascript in
++        // onPageStarted is too late: the player has already requested/parsed its ad data by then.
++        if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
++            val adPruneJs = assets.open("yt_adblock.js").bufferedReader().use { it.readText() }
++            WebViewCompat.addDocumentStartJavaScript(
++                webView,
++                adPruneJs,
++                setOf("https://www.youtube.com", "https://youtube.com", "https://m.youtube.com")
++            )
++        } else {
++            android.util.Log.w("BraveTv", "DOCUMENT_START_SCRIPT unsupported on this WebView; update Android System WebView")
++        }
+         webView.loadUrl(url)
+     }
+ 
