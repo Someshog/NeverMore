@@ -4,7 +4,7 @@
 
 **Open-source, ad-blocking web app launcher for Android TV.**
 
-Open YouTube TV, Twitch and other streaming sites on the big screen with ad and tracker blocking built in, powered by the same filtering engine Brave uses.
+Open YouTube TV other streaming sites (building) on the big screen with ad and tracker blocking built in, powered by the same filtering engine Brave uses.
 
 [![Build](https://github.com/Someshog/NeverMore/actions/workflows/build.yml/badge.svg)](https://github.com/Someshog/NeverMore/actions/workflows/build.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
