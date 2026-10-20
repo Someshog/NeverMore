@@ -47,6 +47,9 @@ NeverMore sets a smart-TV user agent so `youtube.com/tv` serves its TV interface
 | `cargo ndk` can't find the NDK | Set `ANDROID_NDK_HOME` to your NDK folder |
 | `./gradlew: Permission denied` | `chmod +x gradlew` |
 
+## Navigation Issues
+If Back does nothing on your TV, change BACK_KEY_CODE from 27 to 10009 in TvWebViewActivity.kt (Samsung/Tizen code). 27 works on Xiaomi TVs.
+
 ## Still stuck?
 
 [Open an issue](https://github.com/Someshog/NeverMore/issues/new/choose) and include your device model, Android version, CPU ABI, WebView version, and the logcat output.
