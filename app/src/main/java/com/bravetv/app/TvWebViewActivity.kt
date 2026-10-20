@@ -75,6 +75,7 @@ class TvWebViewActivity : ComponentActivity() {
                     fullscreenView = null
                     fullscreenCallback = null
                     webView.visibility = View.VISIBLE
+                    webView.requestFocus() // otherwise the D-pad can land on nothing after fullscreen
                     hideSystemUi()
                 }
             }
@@ -108,6 +109,7 @@ class TvWebViewActivity : ComponentActivity() {
         super.onResume()
         webView.onResume()
         webView.resumeTimers()
+        webView.requestFocus() // keep D-pad input going to the page after returning to the app
     }
 
     override fun onPause() {
@@ -140,18 +142,64 @@ class TvWebViewActivity : ComponentActivity() {
                 return true
             }
             KeyEvent.KEYCODE_BACK -> {
-                // If a fullscreen video is shown, dismiss it first
-                if (fullscreenView != null) {
-                    (webView.webChromeClient as? WebChromeClient)?.onHideCustomView()
-                    return true
-                }
-                if (webView.canGoBack()) {
-                    webView.goBack()
-                    return true
-                }
+                // Act on key-up so that a long press can exit the app instead (see onKeyLongPress).
+                event.startTracking()
+                return true
             }
         }
         return super.onKeyDown(keyCode, event)
+    }
+
+    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_BACK && event.isTracking && !event.isCanceled) {
+            handleBack()
+            return true
+        }
+        return super.onKeyUp(keyCode, event)
+    }
+
+    /** Long-press Back always leaves the app, since a normal press is now handled by the page. */
+    override fun onKeyLongPress(keyCode: Int, event: KeyEvent): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_BACK) {
+            finish()
+            return true
+        }
+        return super.onKeyLongPress(keyCode, event)
+    }
+
+    private fun handleBack() {
+        // 1. A fullscreen video surface is showing: dismiss it first.
+        if (fullscreenView != null) {
+            (webView.webChromeClient as? WebChromeClient)?.onHideCustomView()
+            return
+        }
+        // 2. YouTube TV is a single-page app that pushes a browser-history entry for almost every
+        //    screen, so WebView.goBack() takes many presses to get anywhere. Send Back to the page
+        //    instead and let YouTube navigate on its own, like a normal TV remote would.
+        val host = android.net.Uri.parse(webView.url.orEmpty()).host.orEmpty()
+        if (host == "youtube.com" || host.endsWith(".youtube.com")) {
+            sendBackKeyToPage()
+            return
+        }
+        // 3. Other sites behave like a normal browser.
+        if (webView.canGoBack()) webView.goBack() else finish()
+    }
+
+    /** Dispatches a Back key press into the page (keydown + keyup). */
+    private fun sendBackKeyToPage() {
+        runJs(
+            """
+            (function(c){
+              var t=document.activeElement||document.body;
+              ['keydown','keyup'].forEach(function(type){
+                var e=new KeyboardEvent(type,{key:'Escape',code:'Escape',bubbles:true,cancelable:true});
+                Object.defineProperty(e,'keyCode',{get:function(){return c}});
+                Object.defineProperty(e,'which',{get:function(){return c}});
+                t.dispatchEvent(e);
+              });
+            })($BACK_KEY_CODE);
+            """.trimIndent()
+        )
     }
 
     private fun runJs(script: String) { webView.evaluateJavascript(script, null) }
@@ -165,6 +213,13 @@ class TvWebViewActivity : ComponentActivity() {
     companion object {
         const val EXTRA_TITLE = "service_title"
         const val EXTRA_URL = "service_url"
+
+        /**
+         * Key code sent to YouTube when Back is pressed. 27 is Escape, which YouTube TV accepts as
+         * Back in browsers. With the Samsung/Tizen user agent below, some devices may expect the
+         * Tizen Back code 10009 instead; if Back does nothing on your TV, try changing this to 10009.
+         */
+        const val BACK_KEY_CODE = 27
         const val TV_USER_AGENT = "Mozilla/5.0 (SMART-TV; LINUX; Tizen 6.0) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/6.0 TV Safari/537.36"
     }
 }
