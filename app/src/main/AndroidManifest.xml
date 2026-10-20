@@ -7,7 +7,7 @@
 
     <application
         android:allowBackup="false"
-        android:label="braveTv"
+        android:label="NeverMore"
         android:banner="@drawable/tv_banner"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.NoActionBar"

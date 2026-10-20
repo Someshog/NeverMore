@@ -57,7 +57,7 @@ private fun HomeScreen(onOpen: (String, String) -> Unit) {
         verticalArrangement = Arrangement.spacedBy(36.dp)
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("braveTv", fontSize = 42.sp, fontWeight = FontWeight.Bold, color = Color.White)
+            Text("NeverMore", fontSize = 42.sp, fontWeight = FontWeight.Bold, color = Color.White)
             Text("Your streaming apps, ready for the big screen", fontSize = 19.sp, color = Color(0xFFADB5C5))
         }
         Row(horizontalArrangement = Arrangement.spacedBy(28.dp), verticalAlignment = Alignment.CenterVertically) {

@@ -1,136 +1,100 @@
-# BraveTv 📺🛡️
+<div align="center">
 
-**BraveTv** is a privacy-first, ad-blocking Smart TV web app and streaming launcher designed for **Android TV**, **Google TV**, and Leanback-compatible devices.
+# NeverMore 📺🛡️
 
-Powered by Brave's native `adblock-rust` filtering engine, BraveTv allows you to stream content from your favorite web streaming services (such as YouTube TV, Hotstar, Twitch, etc.) on the big screen with high-performance ad-blocking and clean video playback.
+**Open-source, ad-blocking web app launcher for Android TV.**
+
+Open YouTube TV, Twitch and other streaming sites on the big screen with ad and tracker blocking built in, powered by the same filtering engine Brave uses.
+
+[![Build](https://github.com/Someshog/NeverMore/actions/workflows/build.yml/badge.svg)](https://github.com/Someshog/NeverMore/actions/workflows/build.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![Platform](https://img.shields.io/badge/platform-Android%20TV%20%7C%20Google%20TV%20%7C%20Fire%20TV-3ddc84)
+![Min SDK](https://img.shields.io/badge/minSdk-23-informational)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+
+[Features](#-features) · [Quick start](#-quick-start) · [How it works](#-how-it-works) · [Docs](#-documentation) · [Contributing](#-contributing) · [Legal](#%EF%B8%8F-legal)
+
+</div>
 
 ---
+
+> **Personal use only.** Blocking ads on YouTube is against YouTube's Terms of Service, and you use NeverMore at your own risk. It is meant to be sideloaded for personal use and is not available on Google Play. If you enjoy a creator's work, consider supporting them directly or subscribing to YouTube Premium. Please read the [Disclaimer](DISCLAIMER.md).
 
 ## ✨ Features
 
-- 🛋️ **TV-First Experience**: Built for Android TV / Google TV with Leanback launcher banner and D-Pad remote navigation.
-- ⚡ **Native Brave Ad-Block Engine**: Uses compiled Rust JNI bindings (`adblock-rust`) with high-speed rule matching for EasyList, uBlock Origin, and Brave filter lists.
-- 🛡️ **Multi-Tier Ad Mitigation**:
-  1. **Network Layer**: Blocks third-party ad networks, telemetry, and tracking endpoints before requests leave the device.
-  2. **Smart Stream Allowlist**: Protects video CDN streams (`googlevideo.com`), essential player runtime scripts (`/s/player/`), and connectivity probes so video playback never breaks or stalls.
-  3. **HLS Stream Cleanser**: Intercepts `.m3u8` playlists and strips `#EXT-X-CUE-OUT` / SCTE-35 ad break markers in real-time.
-  4. **DOM Ad-Skipper & Cosmetic Filter**: Automatically dismisses overlays, fast-forwards in-stream ads, and injects cosmetic CSS hide rules.
-- 🖥️ **Smart TV User-Agent**: Configured with a Smart TV User-Agent string to automatically load optimized 10-foot TV interfaces.
-- 🎮 **Hardware Remote Integration**: Handles media keys (Play/Pause) and back navigation gracefully.
+- 🛋️ **Built for the couch.** Leanback launcher, D-pad navigation, media-key support, and a smart-TV user agent so sites load their 10-foot interfaces.
+- ⚡ **Fast native filtering.** Rust bindings to [`adblock-rust`](https://github.com/brave/adblock-rust), with EasyList, uBlock Origin and Brave lists, refreshed daily.
+- 🎯 **Targets in-stream ads.** Strips ad data from YouTube's player responses before the player sees it, with a player-level skip as a backup.
+- 🧹 **Cleaner pages.** Cosmetic filtering hides leftover ad elements.
+- 🛡️ **Safe by default.** An allowlist keeps video streams and player scripts from being blocked by mistake.
+- 🔒 **No accounts, no analytics.** NeverMore doesn't phone home. See [PRIVACY.md](PRIVACY.md).
+- 📦 **Wide device support.** Prebuilt native libraries for `armeabi-v7a`, `arm64-v8a`, `x86` and `x86_64`.
 
----
+## 🚀 Quick start
 
-## 🏗️ Architecture
+### Install a prebuilt APK
 
-```
-┌────────────────────────────────────────────────────────┐
-│                   BraveTv Android App                  │
-├──────────────────────────┬─────────────────────────────┤
-│      MainActivity        │     TvWebViewActivity       │
-│  (Compose TV Launcher)   │  (10-ft WebView Container)  │
-├──────────────────────────┴─────────────────────────────┤
-│                 AdBlockWebViewClient                   │
-│   • YouTube Essential Allowlist                        │
-│   • HLS Manifest SCTE-35 / CUE-OUT Cleanser            │
-│   • Cosmetic CSS Injection & DOM Ad-Skipper            │
-├────────────────────────────────────────────────────────┤
-│                     BraveEngine                        │
-│   • Background rule caching & auto-updates             │
-│   • EasyList / uBlock / Brave rule bundles             │
-├────────────────────────────────────────────────────────┤
-│                 libadblock_jni.so (Rust)               │
-│   • High-speed regex / bloom filter matching           │
-└────────────────────────────────────────────────────────┘
-```
-
----
-
-## 🚀 Getting Started
-
-### Prerequisites
-
-- **Android Studio** (Koala / Ladybug or newer recommended)
-- **Android SDK** (Min SDK: 23 / Android 6.0, Target SDK: 35)
-- **JDK 17+**
-- *(Optional)* **Rust & `cargo-ndk`** — only required if modifying the native Rust engine in `native/`. Pre-compiled libraries for `arm64-v8a`, `x86`, and `x86_64` are already included in `app/src/main/jniLibs/`.
-
----
-
-## 🛠️ Building from Source
-
-### Using Android Studio
-
-1. Open Android Studio.
-2. Select **File → Open...** and choose the `braveTv` folder.
-3. Allow Gradle to sync dependencies.
-4. Select your target TV device or emulator in the device selector.
-5. Click **Run** (`Shift + F10`) or navigate to **Build → Build Bundle(s) / APK(s) → Build APK(s)**.
-
-### Using Command Line (Gradle)
-
-#### Build Debug APK:
-```bash
-# Windows
-.\gradlew assembleDebug
-
-# Linux / macOS
-./gradlew assembleDebug
-```
-The output APK will be located at:
-```
-app/build/outputs/apk/debug/app-debug.apk
-```
-
-#### Build Release APK:
-```bash
-# Windows
-.\gradlew assembleRelease
-
-# Linux / macOS
-./gradlew assembleRelease
-```
-The output APK will be located at:
-```
-app/build/outputs/apk/release/app-release-unsigned.apk
-```
-
----
-
-## 📲 Installation / Sideloading onto Android TV
-
-You can install the APK directly to any Android TV device or emulator using `adb`:
-
-```bash
-# Connect to your Android TV (ensure ADB Debugging is enabled on TV)
-adb connect <YOUR_TV_IP_ADDRESS>:5555
-
-# Install the APK
-adb install -r app/build/outputs/apk/debug/app-debug.apk
-
-# Launch the app
-adb shell am start -n com.bravetv.app/.MainActivity
-```
-
----
-
-## 🦀 Rebuilding the Native Rust Library (Optional)
-
-If you modify the Rust engine located in `native/`:
-
-1. Install Rust and `cargo-ndk`:
+1. Download the latest APK from the [Releases](https://github.com/Someshog/NeverMore/releases) page.
+2. Enable **Developer options → USB/Network debugging** on your TV.
+3. Install it:
    ```bash
-   rustup target add aarch64-linux-android x86_64-linux-android
-   cargo install cargo-ndk
+   adb connect <TV_IP_ADDRESS>:5555
+   adb install -r NeverMore.apk
    ```
-2. Build and output directly into `app/src/main/jniLibs/`:
-   ```bash
-   cd native
-   cargo ndk -t arm64-v8a -t x86_64 -o ../app/src/main/jniLibs build --release
-   ```
+4. Open **NeverMore** from your TV's app row.
 
----
+### Build from source
 
-## 📄 License
+```bash
+git clone https://github.com/Someshog/NeverMore.git
+cd NeverMore
+./gradlew assembleDebug        # Windows: .\gradlew assembleDebug
+```
 
-This project is licensed under the [MIT License](LICENSE).
-Brave's `adblock-rust` library is subject to its respective upstream Mozilla Public License (MPL 2.0).
+The APK is written to `app/build/outputs/apk/debug/app-debug.apk`. Requirements are JDK 17+ and the Android SDK (API 35). Full instructions, including rebuilding the native library, are in [docs/BUILDING.md](docs/BUILDING.md).
+
+> **Which build does my TV need?** Run `adb shell getprop ro.product.cpu.abilist`. The APK includes libraries for all common CPUs, so one APK works on most devices.
+
+## 🔍 How it works
+
+NeverMore blocks ads in layers, because no single technique is enough:
+
+| Layer | What it does |
+|---|---|
+| **Network filtering** | Checks each request against filter lists and blocks ad and tracker hosts, including YouTube's own ad endpoints. |
+| **Ad data pruning** | A script injected before the page loads removes `adPlacements`, `playerAds` and `adSlots` from API responses, so the player has no ads to play. |
+| **Player fallback** | If an ad still reaches the player, it is muted, skipped to the end, and any skip button is clicked. |
+| **Stream allowlist** | Protects video CDN traffic and player scripts so playback doesn't stall. |
+| **HLS cleaner** | Removes ad-break markers from `.m3u8` playlists on other sites. |
+| **Cosmetic filtering** | Hides leftover ad elements with CSS. |
+
+A deeper explanation is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+> **Heads up:** YouTube changes how it delivers ads every few weeks, so ad blocking can break without warning. When it does, please [open an issue](https://github.com/Someshog/NeverMore/issues/new/choose) with logcat output. Fixes usually only need small changes to the pruning script.
+
+## 📚 Documentation
+
+| Document | What's in it |
+|---|---|
+| [docs/BUILDING.md](docs/BUILDING.md) | Building the app and the native library, installing on a TV |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the app and its blocking layers fit together |
+| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Ads still showing, playback problems, logcat tips |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | How to report bugs and submit changes |
+| [CHANGELOG.md](CHANGELOG.md) | What changed in each version |
+| [PRIVACY.md](PRIVACY.md) | What data the app does and doesn't touch |
+| [DISCLAIMER.md](DISCLAIMER.md) | Terms-of-service, trademark and warranty notices |
+| [SECURITY.md](SECURITY.md) | How to report a vulnerability |
+
+## 🤝 Contributing
+
+Contributions of every size are welcome, from fixing a typo to updating the ad-pruning script when YouTube changes. Start with [CONTRIBUTING.md](CONTRIBUTING.md). Please also read our [Code of Conduct](CODE_OF_CONDUCT.md).
+
+## ⚖️ Legal
+
+- NeverMore is released under the [MIT License](LICENSE).
+- Third-party components keep their own licenses. See [NOTICE](NOTICE).
+- NeverMore is an independent project and is not affiliated with Brave Software, Google or YouTube. See [DISCLAIMER.md](DISCLAIMER.md).
+
+## 🙏 Acknowledgements
+
+NeverMore stands on the shoulders of [adblock-rust](https://github.com/brave/adblock-rust) by Brave, [EasyList](https://easylist.to), and [uBlock Origin's](https://github.com/gorhill/uBlock) filter lists and scriptlet ideas.

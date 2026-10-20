@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/Someshog/NeverMore/security/advisories/new
+    about: Please report security problems privately, not in a public issue.
+  - name: Troubleshooting guide
+    url: https://github.com/Someshog/NeverMore/blob/main/docs/TROUBLESHOOTING.md
+    about: Common problems and how to fix them.

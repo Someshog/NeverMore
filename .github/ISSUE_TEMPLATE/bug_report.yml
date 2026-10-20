@@ -1,0 +1,86 @@
+name: Bug report
+description: Something isn't working, or ads are showing again
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this! Please check [docs/TROUBLESHOOTING.md](https://github.com/Someshog/NeverMore/blob/main/docs/TROUBLESHOOTING.md) first.
+        **Security problems:** please don't post them here. See [SECURITY.md](https://github.com/Someshog/NeverMore/blob/main/SECURITY.md).
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open YouTube TV
+        2. Play a video
+        3. An ad plays before the video
+    validations:
+      required: true
+  - type: dropdown
+    id: service
+    attributes:
+      label: Which site or service?
+      options:
+        - YouTube TV
+        - JioHotstar
+        - Twitch
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Device
+      description: TV or streaming stick model
+      placeholder: "e.g. Xiaomi Mi Box S, Fire TV Stick 4K"
+    validations:
+      required: true
+  - type: input
+    id: android
+    attributes:
+      label: Android version
+      placeholder: "e.g. Android TV 11"
+    validations:
+      required: true
+  - type: input
+    id: abi
+    attributes:
+      label: CPU ABI
+      description: Output of `adb shell getprop ro.product.cpu.abilist`
+      placeholder: "e.g. arm64-v8a,armeabi-v7a,armeabi"
+  - type: input
+    id: webview
+    attributes:
+      label: Android System WebView version
+      placeholder: "e.g. 126.0.6478.71"
+  - type: input
+    id: version
+    attributes:
+      label: NeverMore version
+      placeholder: "e.g. 1.0.0 or commit hash"
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logcat output
+      description: "Captured while the problem happens: `adb logcat -s NeverMore BraveEngine`"
+      render: shell
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues and didn't find a duplicate.
+          required: true
+        - label: I'm using this software in line with the [Disclaimer](https://github.com/Someshog/NeverMore/blob/main/DISCLAIMER.md).
+          required: true

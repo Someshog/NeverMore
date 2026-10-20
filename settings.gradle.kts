@@ -10,5 +10,5 @@ dependencyResolutionManagement {
     repositories { google(); mavenCentral() }
 }
 
-rootProject.name = "braveTv"
+rootProject.name = "NeverMore"
 include(":app")

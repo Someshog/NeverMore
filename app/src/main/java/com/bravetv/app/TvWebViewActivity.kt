@@ -26,7 +26,7 @@ class TvWebViewActivity : ComponentActivity() {
         hideSystemUi()
 
         val url = intent.getStringExtra(EXTRA_URL) ?: "https://www.youtube.com/tv"
-        title = intent.getStringExtra(EXTRA_TITLE) ?: "braveTv"
+        title = intent.getStringExtra(EXTRA_TITLE) ?: "NeverMore"
 
         rootLayout = FrameLayout(this).apply {
             setBackgroundColor(Color.BLACK)
@@ -99,7 +99,7 @@ class TvWebViewActivity : ComponentActivity() {
                 setOf("https://www.youtube.com", "https://youtube.com", "https://m.youtube.com")
             )
         } else {
-            android.util.Log.w("BraveTv", "DOCUMENT_START_SCRIPT unsupported on this WebView; update Android System WebView")
+            android.util.Log.w("NeverMore", "DOCUMENT_START_SCRIPT unsupported on this WebView; update Android System WebView")
         }
         webView.loadUrl(url)
     }

@@ -75,7 +75,7 @@ class AdBlockWebViewClient : WebViewClient() {
 
     override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: android.webkit.WebResourceError?) {
         super.onReceivedError(view, request, error)
-        android.util.Log.e("BraveTv", "WebView error loading ${request?.url}: ${error?.description}")
+        android.util.Log.e("NeverMore", "WebView error loading ${request?.url}: ${error?.description}")
     }
 
     override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest): WebResourceResponse? {
@@ -90,7 +90,7 @@ class AdBlockWebViewClient : WebViewClient() {
             return emptyResponse()
         }
         if (!request.isForMainFrame && !isYouTubeEssentialUrl(url) && BraveEngine.shouldBlockUrl(url, sourceUrl, resourceType)) {
-            android.util.Log.d("BraveTv", "BLOCKED: $url")
+            android.util.Log.d("NeverMore", "BLOCKED: $url")
             return emptyResponse()
         }
         val accept = request.requestHeaders.entries.firstOrNull { it.key.equals("Accept", true) }

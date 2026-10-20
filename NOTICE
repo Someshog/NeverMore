@@ -1,0 +1,25 @@
+NeverMore
+Copyright (c) 2026 NeverMore Contributors. Licensed under the MIT License (see LICENSE).
+
+This project includes or downloads third-party software and data. Each remains
+under its own license, and those licenses apply to those parts only.
+
+1. adblock-rust (https://github.com/brave/adblock-rust)
+   Brave Software. Mozilla Public License 2.0.
+   Compiled into libadblock_jni.so (see native/). If you modify adblock-rust's own
+   files, MPL 2.0 requires you to publish those modifications.
+
+2. Filter lists, downloaded at runtime (and bundled as an offline fallback):
+   - EasyList (https://easylist.to): GPLv3+ / CC BY-SA 3.0
+   - uBlock Origin filters (https://github.com/uBlockOrigin/uAssets): GPLv3
+   - Brave adblock lists and resources (https://github.com/brave/adblock-lists,
+     https://github.com/brave/adblock-resources): MPL 2.0
+   The bundled copy is app/src/main/assets/easylist.txt. See the license terms of
+   each list before redistributing it.
+
+3. Android libraries (androidx, Jetpack Compose, TV Material): Apache License 2.0.
+
+NeverMore is an independent project. It is not affiliated with, endorsed by, or
+sponsored by Brave Software, Google, or YouTube. "Brave", "YouTube", "Google TV",
+"Android TV", "Twitch" and "Hotstar" are trademarks of their respective owners and
+are used only to describe compatibility.
