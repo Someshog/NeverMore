@@ -26,3 +26,7 @@ All notable changes to NeverMore are documented here. The format is based on [Ke
 
 [Unreleased]: https://github.com/Someshog/NeverMore/compare/v1.0.0...HEAD
 [1.0.0]: https://github.com/Someshog/NeverMore/releases/tag/v1.0.0
+
+### Fixed
+- Back button on YouTube TV now goes back one screen instead of taking many presses.
+  Long-press Back exits the app. Tested on a Xiaomi TV (Back key code 27).
