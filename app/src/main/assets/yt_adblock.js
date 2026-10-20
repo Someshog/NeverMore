@@ -125,8 +125,24 @@
       video.playbackRate = 16;
       video.currentTime = video.duration;
     }
-    var skip = document.querySelector('.ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-ad-skip-button-modern');
+    var skip = document.querySelector('.ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-ad-skip-button-modern, #movie_player [class*="skip-button"], .html5-video-player [class*="skip-button"]');
     if (skip && skip.offsetParent !== null) skip.click();
   }
   setInterval(skipFallback, 250);
+  // 6. Hide ad overlays with CSS. One-time style rule, so there is no polling or DOM observer
+  //    (the old script ran both and could slow D-pad scrolling on weak TVs).
+  var HIDE_CSS = [
+    '.ytp-ad-overlay-container', '.ytp-ad-text-overlay', '.ytp-ad-player-overlay-instream-info',
+    '#player-ads', '.ytd-banner-promo-renderer', 'ytd-action-companion-ad-renderer',
+    'ytd-display-ad-renderer', 'ytd-promoted-sparkles-web-renderer', '.ytp-ce-element'
+  ].join(',') + '{display:none!important}';
+  function addHideStyle() {
+    try {
+      var st = document.createElement('style');
+      st.textContent = HIDE_CSS;
+      (document.head || document.documentElement).appendChild(st);
+    } catch (e) {}
+  }
+  if (document.documentElement) addHideStyle();
+  else document.addEventListener('DOMContentLoaded', addHideStyle);
 })();

@@ -1,0 +1,1761 @@
+diff --git a/app/src/main/assets/yt_adblock.js b/app/src/main/assets/yt_adblock.js
+index 5d458dd..7da017b 100644
+--- a/app/src/main/assets/yt_adblock.js
++++ b/app/src/main/assets/yt_adblock.js
+@@ -125,8 +125,24 @@
+       video.playbackRate = 16;
+       video.currentTime = video.duration;
+     }
+-    var skip = document.querySelector('.ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-ad-skip-button-modern');
++    var skip = document.querySelector('.ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-ad-skip-button-modern, #movie_player [class*="skip-button"], .html5-video-player [class*="skip-button"]');
+     if (skip && skip.offsetParent !== null) skip.click();
+   }
+   setInterval(skipFallback, 250);
++  // 6. Hide ad overlays with CSS. One-time style rule, so there is no polling or DOM observer
++  //    (the old script ran both and could slow D-pad scrolling on weak TVs).
++  var HIDE_CSS = [
++    '.ytp-ad-overlay-container', '.ytp-ad-text-overlay', '.ytp-ad-player-overlay-instream-info',
++    '#player-ads', '.ytd-banner-promo-renderer', 'ytd-action-companion-ad-renderer',
++    'ytd-display-ad-renderer', 'ytd-promoted-sparkles-web-renderer', '.ytp-ce-element'
++  ].join(',') + '{display:none!important}';
++  function addHideStyle() {
++    try {
++      var st = document.createElement('style');
++      st.textContent = HIDE_CSS;
++      (document.head || document.documentElement).appendChild(st);
++    } catch (e) {}
++  }
++  if (document.documentElement) addHideStyle();
++  else document.addEventListener('DOMContentLoaded', addHideStyle);
+ })();
+diff --git a/app/src/main/java/com/bravetv/app/AdBlockWebViewClient.kt b/app/src/main/java/com/bravetv/app/AdBlockWebViewClient.kt
+index 0c71c3d..3391c26 100644
+--- a/app/src/main/java/com/bravetv/app/AdBlockWebViewClient.kt
++++ b/app/src/main/java/com/bravetv/app/AdBlockWebViewClient.kt
+@@ -18,10 +18,6 @@ class AdBlockWebViewClient : WebViewClient() {
+     override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+         if (!url.isNullOrBlank()) sourcePageUrl = url
+         super.onPageStarted(view, url, favicon)
+-        // Inject ad-skipper as early as possible (before YouTube renders the player)
+-        if (url != null && (url.contains("youtube.com") || url.contains("youtu.be"))) {
+-            view?.evaluateJavascript(YOUTUBE_AD_SKIP_JS, null)
+-        }
+     }
+ 
+     override fun onPageFinished(view: WebView?, url: String?) {
+@@ -29,11 +25,6 @@ class AdBlockWebViewClient : WebViewClient() {
+         if (view == null || url.isNullOrBlank()) return
+         sourcePageUrl = url
+ 
+-        // Re-inject on every navigation (YouTube TV is a SPA — URL changes without full reload)
+-        if (url.contains("youtube.com") || url.contains("youtu.be")) {
+-            view.evaluateJavascript(YOUTUBE_AD_SKIP_JS, null)
+-        }
+-
+         runCatching { BraveEngine.getCosmeticResources(url) }
+             .getOrNull()
+             ?.takeIf(String::isNotBlank)
+@@ -345,68 +336,4 @@ class AdBlockWebViewClient : WebViewClient() {
+ 
+     private fun JSONArray?.toStringArray(): Array<String> =
+         if (this == null) emptyArray() else Array(length()) { index -> optString(index) }
+-
+-    companion object {
+-        /**
+-         * Injected into YouTube pages to auto-skip/mute ads.
+-         * Strategy:
+-         *  1. MutationObserver watches for the skip button and clicks it immediately.
+-         *  2. When the player has the `ad-showing` class, fast-forwards the ad video to its end.
+-         *  3. Hides ad overlay UI elements via CSS.
+-         *  4. Re-runs on YouTube TV's SPA navigation via yt-navigate-finish event.
+-         */
+-        val YOUTUBE_AD_SKIP_JS = """
+-(function(){
+-  if(window.__braveAdSkipInstalled) return;
+-  window.__braveAdSkipInstalled = true;
+-
+-  function skipAds(){
+-    // 1. Click any visible skip button
+-    var skipBtn = document.querySelector('.ytp-skip-ad-button, .ytp-ad-skip-button, [class*="skip-button"]');
+-    if(skipBtn && skipBtn.offsetParent !== null){ skipBtn.click(); }
+-
+-    // 2. Fast-forward in-stream ad videos
+-    var player = document.querySelector('.html5-main-video, video');
+-    if(player){
+-      var container = player.closest('.html5-video-player') || document.getElementById('movie_player');
+-      var isAd = (container && (container.classList.contains('ad-showing') || container.classList.contains('ad-interrupting')))
+-                 || (player.duration > 0 && player.currentTime === 0 && document.querySelector('.ytp-ad-player-overlay'));
+-      if(isAd && isFinite(player.duration) && player.duration > 0){
+-        player.currentTime = player.duration;
+-      }
+-    }
+-
+-    // 3. Hide ad UI overlays
+-    var adSelectors = [
+-      '.ytp-ad-overlay-container',
+-      '.ytp-ad-text-overlay',
+-      '.ytp-ad-player-overlay-instream-info',
+-      '#player-ads',
+-      '.ytd-banner-promo-renderer',
+-      'ytd-action-companion-ad-renderer',
+-      'ytd-display-ad-renderer',
+-      'ytd-promoted-sparkles-web-renderer',
+-      '.ytp-ce-element'
+-    ];
+-    adSelectors.forEach(function(sel){
+-      document.querySelectorAll(sel).forEach(function(el){ el.style.setProperty('display','none','important'); });
+-    });
+-  }
+-
+-  // Run immediately
+-  skipAds();
+-
+-  // Watch DOM for dynamically injected ads
+-  var observer = new MutationObserver(function(){ skipAds(); });
+-  observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+-
+-  // Also poll every 300ms (YouTube TV uses shadow DOM — MutationObserver can miss events)
+-  setInterval(skipAds, 300);
+-
+-  // Re-attach on YouTube TV SPA navigation
+-  window.addEventListener('yt-navigate-finish', function(){ skipAds(); });
+-})()
+-""".trimIndent()
+-    }
+ }
+-
+diff --git a/nevermore-backbutton.patch b/nevermore-backbutton.patch
+deleted file mode 100644
+index 7408482..0000000
+--- a/nevermore-backbutton.patch
++++ /dev/null
+@@ -1,110 +0,0 @@
+-diff --git a/app/src/main/java/com/bravetv/app/TvWebViewActivity.kt b/app/src/main/java/com/bravetv/app/TvWebViewActivity.kt
+-index 5125a87..13132d4 100644
+---- a/app/src/main/java/com/bravetv/app/TvWebViewActivity.kt
+-+++ b/app/src/main/java/com/bravetv/app/TvWebViewActivity.kt
+-@@ -75,6 +75,7 @@ class TvWebViewActivity : ComponentActivity() {
+-                     fullscreenView = null
+-                     fullscreenCallback = null
+-                     webView.visibility = View.VISIBLE
+-+                    webView.requestFocus() // otherwise the D-pad can land on nothing after fullscreen
+-                     hideSystemUi()
+-                 }
+-             }
+-@@ -108,6 +109,7 @@ class TvWebViewActivity : ComponentActivity() {
+-         super.onResume()
+-         webView.onResume()
+-         webView.resumeTimers()
+-+        webView.requestFocus() // keep D-pad input going to the page after returning to the app
+-     }
+- 
+-     override fun onPause() {
+-@@ -140,20 +142,66 @@ class TvWebViewActivity : ComponentActivity() {
+-                 return true
+-             }
+-             KeyEvent.KEYCODE_BACK -> {
+--                // If a fullscreen video is shown, dismiss it first
+--                if (fullscreenView != null) {
+--                    (webView.webChromeClient as? WebChromeClient)?.onHideCustomView()
+--                    return true
+--                }
+--                if (webView.canGoBack()) {
+--                    webView.goBack()
+--                    return true
+--                }
+-+                // Act on key-up so that a long press can exit the app instead (see onKeyLongPress).
+-+                event.startTracking()
+-+                return true
+-             }
+-         }
+-         return super.onKeyDown(keyCode, event)
+-     }
+- 
+-+    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
+-+        if (keyCode == KeyEvent.KEYCODE_BACK && event.isTracking && !event.isCanceled) {
+-+            handleBack()
+-+            return true
+-+        }
+-+        return super.onKeyUp(keyCode, event)
+-+    }
+-+
+-+    /** Long-press Back always leaves the app, since a normal press is now handled by the page. */
+-+    override fun onKeyLongPress(keyCode: Int, event: KeyEvent): Boolean {
+-+        if (keyCode == KeyEvent.KEYCODE_BACK) {
+-+            finish()
+-+            return true
+-+        }
+-+        return super.onKeyLongPress(keyCode, event)
+-+    }
+-+
+-+    private fun handleBack() {
+-+        // 1. A fullscreen video surface is showing: dismiss it first.
+-+        if (fullscreenView != null) {
+-+            (webView.webChromeClient as? WebChromeClient)?.onHideCustomView()
+-+            return
+-+        }
+-+        // 2. YouTube TV is a single-page app that pushes a browser-history entry for almost every
+-+        //    screen, so WebView.goBack() takes many presses to get anywhere. Send Back to the page
+-+        //    instead and let YouTube navigate on its own, like a normal TV remote would.
+-+        val host = android.net.Uri.parse(webView.url.orEmpty()).host.orEmpty()
+-+        if (host == "youtube.com" || host.endsWith(".youtube.com")) {
+-+            sendBackKeyToPage()
+-+            return
+-+        }
+-+        // 3. Other sites behave like a normal browser.
+-+        if (webView.canGoBack()) webView.goBack() else finish()
+-+    }
+-+
+-+    /** Dispatches a Back key press into the page (keydown + keyup). */
+-+    private fun sendBackKeyToPage() {
+-+        runJs(
+-+            """
+-+            (function(c){
+-+              var t=document.activeElement||document.body;
+-+              ['keydown','keyup'].forEach(function(type){
+-+                var e=new KeyboardEvent(type,{key:'Escape',code:'Escape',bubbles:true,cancelable:true});
+-+                Object.defineProperty(e,'keyCode',{get:function(){return c}});
+-+                Object.defineProperty(e,'which',{get:function(){return c}});
+-+                t.dispatchEvent(e);
+-+              });
+-+            })($BACK_KEY_CODE);
+-+            """.trimIndent()
+-+        )
+-+    }
+-+
+-     private fun runJs(script: String) { webView.evaluateJavascript(script, null) }
+- 
+-     override fun onDestroy() {
+-@@ -165,6 +213,13 @@ class TvWebViewActivity : ComponentActivity() {
+-     companion object {
+-         const val EXTRA_TITLE = "service_title"
+-         const val EXTRA_URL = "service_url"
+-+
+-+        /**
+-+         * Key code sent to YouTube when Back is pressed. 27 is Escape, which YouTube TV accepts as
+-+         * Back in browsers. With the Samsung/Tizen user agent below, some devices may expect the
+-+         * Tizen Back code 10009 instead; if Back does nothing on your TV, try changing this to 10009.
+-+         */
+-+        const val BACK_KEY_CODE = 27
+-         const val TV_USER_AGENT = "Mozilla/5.0 (SMART-TV; LINUX; Tizen 6.0) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/6.0 TV Safari/537.36"
+-     }
+- }
+diff --git a/nevermore-docs.patch b/nevermore-docs.patch
+deleted file mode 100644
+index 88e31f2..0000000
+--- a/nevermore-docs.patch
++++ /dev/null
+@@ -1,962 +0,0 @@
+-diff --git a/.github/ISSUE_TEMPLATE/bug_report.yml b/.github/ISSUE_TEMPLATE/bug_report.yml
+-new file mode 100644
+-index 0000000..758908c
+---- /dev/null
+-+++ b/.github/ISSUE_TEMPLATE/bug_report.yml
+-@@ -0,0 +1,86 @@
+-+name: Bug report
+-+description: Something isn't working, or ads are showing again
+-+title: "[Bug] "
+-+labels: ["bug"]
+-+body:
+-+  - type: markdown
+-+    attributes:
+-+      value: |
+-+        Thanks for taking the time to report this! Please check [docs/TROUBLESHOOTING.md](https://github.com/Someshog/NeverMore/blob/main/docs/TROUBLESHOOTING.md) first.
+-+        **Security problems:** please don't post them here. See [SECURITY.md](https://github.com/Someshog/NeverMore/blob/main/SECURITY.md).
+-+  - type: textarea
+-+    id: what-happened
+-+    attributes:
+-+      label: What happened?
+-+      description: What did you expect, and what happened instead?
+-+    validations:
+-+      required: true
+-+  - type: textarea
+-+    id: steps
+-+    attributes:
+-+      label: Steps to reproduce
+-+      placeholder: |
+-+        1. Open YouTube TV
+-+        2. Play a video
+-+        3. An ad plays before the video
+-+    validations:
+-+      required: true
+-+  - type: dropdown
+-+    id: service
+-+    attributes:
+-+      label: Which site or service?
+-+      options:
+-+        - YouTube TV
+-+        - JioHotstar
+-+        - Twitch
+-+        - Other
+-+    validations:
+-+      required: true
+-+  - type: input
+-+    id: device
+-+    attributes:
+-+      label: Device
+-+      description: TV or streaming stick model
+-+      placeholder: "e.g. Xiaomi Mi Box S, Fire TV Stick 4K"
+-+    validations:
+-+      required: true
+-+  - type: input
+-+    id: android
+-+    attributes:
+-+      label: Android version
+-+      placeholder: "e.g. Android TV 11"
+-+    validations:
+-+      required: true
+-+  - type: input
+-+    id: abi
+-+    attributes:
+-+      label: CPU ABI
+-+      description: Output of `adb shell getprop ro.product.cpu.abilist`
+-+      placeholder: "e.g. arm64-v8a,armeabi-v7a,armeabi"
+-+  - type: input
+-+    id: webview
+-+    attributes:
+-+      label: Android System WebView version
+-+      placeholder: "e.g. 126.0.6478.71"
+-+  - type: input
+-+    id: version
+-+    attributes:
+-+      label: NeverMore version
+-+      placeholder: "e.g. 1.0.0 or commit hash"
+-+    validations:
+-+      required: true
+-+  - type: textarea
+-+    id: logs
+-+    attributes:
+-+      label: Logcat output
+-+      description: "Captured while the problem happens: `adb logcat -s NeverMore BraveEngine`"
+-+      render: shell
+-+  - type: checkboxes
+-+    id: checks
+-+    attributes:
+-+      label: Checklist
+-+      options:
+-+        - label: I searched existing issues and didn't find a duplicate.
+-+          required: true
+-+        - label: I'm using this software in line with the [Disclaimer](https://github.com/Someshog/NeverMore/blob/main/DISCLAIMER.md).
+-+          required: true
+-diff --git a/.github/ISSUE_TEMPLATE/config.yml b/.github/ISSUE_TEMPLATE/config.yml
+-new file mode 100644
+-index 0000000..9778738
+---- /dev/null
+-+++ b/.github/ISSUE_TEMPLATE/config.yml
+-@@ -0,0 +1,8 @@
+-+blank_issues_enabled: false
+-+contact_links:
+-+  - name: Report a security vulnerability
+-+    url: https://github.com/Someshog/NeverMore/security/advisories/new
+-+    about: Please report security problems privately, not in a public issue.
+-+  - name: Troubleshooting guide
+-+    url: https://github.com/Someshog/NeverMore/blob/main/docs/TROUBLESHOOTING.md
+-+    about: Common problems and how to fix them.
+-diff --git a/.github/ISSUE_TEMPLATE/feature_request.yml b/.github/ISSUE_TEMPLATE/feature_request.yml
+-new file mode 100644
+-index 0000000..e318c6d
+---- /dev/null
+-+++ b/.github/ISSUE_TEMPLATE/feature_request.yml
+-@@ -0,0 +1,28 @@
+-+name: Feature request
+-+description: Suggest an idea or improvement
+-+title: "[Feature] "
+-+labels: ["enhancement"]
+-+body:
+-+  - type: textarea
+-+    id: problem
+-+    attributes:
+-+      label: What problem would this solve?
+-+      description: Describe the situation, not just the solution.
+-+    validations:
+-+      required: true
+-+  - type: textarea
+-+    id: solution
+-+    attributes:
+-+      label: What would you like to see?
+-+    validations:
+-+      required: true
+-+  - type: textarea
+-+    id: alternatives
+-+    attributes:
+-+      label: Alternatives you've considered
+-+  - type: checkboxes
+-+    id: help
+-+    attributes:
+-+      label: Want to help?
+-+      options:
+-+        - label: I'd be willing to help build this.
+-diff --git a/.github/PULL_REQUEST_TEMPLATE.md b/.github/PULL_REQUEST_TEMPLATE.md
+-new file mode 100644
+-index 0000000..f0576a1
+---- /dev/null
+-+++ b/.github/PULL_REQUEST_TEMPLATE.md
+-@@ -0,0 +1,19 @@
+-+## What does this change?
+-+
+-+<!-- A short summary and why it's needed. Link any related issue: Fixes #123 -->
+-+
+-+## How was it tested?
+-+
+-+<!-- Device or emulator, Android version, CPU ABI, and what you checked. -->
+-+
+-+- [ ] Builds with `./gradlew assembleDebug`
+-+- [ ] Tested on a device or emulator
+-+- [ ] Video playback still works (nothing essential is blocked)
+-+
+-+## Checklist
+-+
+-+- [ ] The change is focused on one topic
+-+- [ ] I updated docs and `CHANGELOG.md` if needed
+-+- [ ] If I touched the package or class names used by JNI, I rebuilt **all** native libraries
+-+- [ ] No keystores, secrets or personal data are included
+-+- [ ] I'm contributing this under the project's [MIT License](../blob/main/LICENSE)
+-diff --git a/.github/dependabot.yml b/.github/dependabot.yml
+-new file mode 100644
+-index 0000000..26c1943
+---- /dev/null
+-+++ b/.github/dependabot.yml
+-@@ -0,0 +1,14 @@
+-+version: 2
+-+updates:
+-+  - package-ecosystem: gradle
+-+    directory: "/"
+-+    schedule:
+-+      interval: monthly
+-+  - package-ecosystem: github-actions
+-+    directory: "/"
+-+    schedule:
+-+      interval: monthly
+-+  - package-ecosystem: cargo
+-+    directory: "/native"
+-+    schedule:
+-+      interval: monthly
+-diff --git a/.github/workflows/build.yml b/.github/workflows/build.yml
+-new file mode 100644
+-index 0000000..2c3f81a
+---- /dev/null
+-+++ b/.github/workflows/build.yml
+-@@ -0,0 +1,35 @@
+-+name: Build
+-+
+-+on:
+-+  push:
+-+    branches: [main]
+-+  pull_request:
+-+
+-+permissions:
+-+  contents: read
+-+
+-+jobs:
+-+  build:
+-+    runs-on: ubuntu-latest
+-+    steps:
+-+      - uses: actions/checkout@v4
+-+
+-+      - uses: actions/setup-java@v4
+-+        with:
+-+          distribution: temurin
+-+          java-version: 17
+-+
+-+      - uses: gradle/actions/setup-gradle@v4
+-+
+-+      - name: Make gradlew executable
+-+        run: chmod +x gradlew
+-+
+-+      - name: Build debug APK
+-+        run: ./gradlew assembleDebug
+-+
+-+      - name: Upload APK
+-+        uses: actions/upload-artifact@v4
+-+        with:
+-+          name: NeverMore-debug-apk
+-+          path: app/build/outputs/apk/debug/app-debug.apk
+-+          if-no-files-found: error
+-diff --git a/CHANGELOG.md b/CHANGELOG.md
+-new file mode 100644
+-index 0000000..e33a152
+---- /dev/null
+-+++ b/CHANGELOG.md
+-@@ -0,0 +1,28 @@
+-+# Changelog
+-+
+-+All notable changes to NeverMore are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project aims to follow [Semantic Versioning](https://semver.org/).
+-+
+-+## [Unreleased]
+-+
+-+### Added
+-+- `yt_adblock.js`: removes ad data (`adPlacements`, `playerAds`, `adSlots`) from YouTube API responses, injected at document start, with a player-level skip fallback.
+-+- Blocking of YouTube's own ad endpoints and Google ad domains.
+-+- Prebuilt native library for `armeabi-v7a` (32-bit ARM TVs and streaming sticks).
+-+- Documentation: architecture, building and troubleshooting guides, contributing guide, code of conduct, security policy, privacy policy, disclaimer and third-party notices.
+-+- GitHub issue and pull request templates, and a build workflow.
+-+
+-+### Changed
+-+- Renamed the project to **NeverMore** (the internal package `com.bravetv.app` is unchanged for now, because the native library depends on it).
+-+- Added the `androidx.webkit` dependency.
+-+
+-+## [1.0.0] - 2026
+-+
+-+### Added
+-+- Android TV launcher with YouTube TV, JioHotstar and Twitch shortcuts.
+-+- WebView container with D-pad and media-key support.
+-+- Native ad-block engine using `adblock-rust` with EasyList, uBlock Origin and Brave filter lists.
+-+- HLS manifest cleaner for ad-break markers.
+-+- Cosmetic filtering.
+-+
+-+[Unreleased]: https://github.com/Someshog/NeverMore/compare/v1.0.0...HEAD
+-+[1.0.0]: https://github.com/Someshog/NeverMore/releases/tag/v1.0.0
+-diff --git a/CODE_OF_CONDUCT.md b/CODE_OF_CONDUCT.md
+-new file mode 100644
+-index 0000000..874ed61
+---- /dev/null
+-+++ b/CODE_OF_CONDUCT.md
+-@@ -0,0 +1,39 @@
+-+# Code of Conduct
+-+
+-+## Our pledge
+-+
+-+We want NeverMore to be a friendly, safe and welcoming project for everyone, regardless of age, background, identity, experience level, nationality, appearance, religion, or beliefs. We pledge to act in ways that contribute to an open, welcoming, diverse, inclusive and healthy community.
+-+
+-+## Our standards
+-+
+-+Examples of behavior that helps create a positive environment:
+-+
+-+- Being kind, patient and respectful to others
+-+- Giving and receiving constructive feedback gracefully
+-+- Assuming good intent, and asking questions when something is unclear
+-+- Focusing on what is best for the project and its users
+-+- Taking responsibility for mistakes and learning from them
+-+
+-+Examples of unacceptable behavior:
+-+
+-+- Harassment, insults, personal attacks, or discriminatory language
+-+- Trolling, deliberately derailing discussions, or repeated off-topic demands
+-+- Publishing others' private information without permission
+-+- Sexualized language or imagery, or unwelcome attention
+-+- Other conduct that would reasonably be considered inappropriate in a professional setting
+-+
+-+## Scope
+-+
+-+This Code of Conduct applies in all project spaces (issues, pull requests, discussions and other project channels) and when someone is representing the project in public.
+-+
+-+## Enforcement
+-+
+-+Maintainers are responsible for clarifying and enforcing these standards and may edit, remove, or reject comments, commits, issues and other contributions that don't follow this Code of Conduct. They may also temporarily or permanently ban anyone for behavior they consider inappropriate, threatening, or harmful.
+-+
+-+To report a problem, contact the maintainer, [@Someshog](https://github.com/Someshog), through GitHub (for sensitive matters, use a private channel such as a [security advisory](https://github.com/Someshog/NeverMore/security) or the contact method on their profile). All reports will be reviewed promptly and fairly, and the privacy of the person reporting will be respected.
+-+
+-+Maintainers may respond with a private warning, a public warning, a temporary ban, or a permanent ban, depending on the severity and pattern of behavior.
+-+
+-+## Attribution
+-+
+-+This Code of Conduct is adapted from the [Contributor Covenant](https://www.contributor-covenant.org), version 2.1, which is available under the [CC BY 4.0 license](https://creativecommons.org/licenses/by/4.0/).
+-diff --git a/CONTRIBUTING.md b/CONTRIBUTING.md
+-new file mode 100644
+-index 0000000..67379cb
+---- /dev/null
+-+++ b/CONTRIBUTING.md
+-@@ -0,0 +1,82 @@
+-+# Contributing to NeverMore
+-+
+-+Thanks for your interest in NeverMore! Every contribution helps, whether it's a bug report, a fix to the ad-pruning script after YouTube changes something, a doc improvement, or a new feature. Everyone taking part is expected to follow our [Code of Conduct](CODE_OF_CONDUCT.md).
+-+
+-+## Ways to help
+-+
+-+- 🐛 **Report a bug.** Especially "ads are showing again" reports with logcat output.
+-+- 💡 **Suggest an idea** through a feature request.
+-+- 📝 **Improve the docs.** Typos, clearer steps, and screenshots are all welcome.
+-+- 🔧 **Send a fix.** The easiest high-value fixes are in `app/src/main/assets/yt_adblock.js`.
+-+- 📺 **Test on devices.** Tell us what works and what doesn't on your TV or streaming stick.
+-+
+-+## Reporting bugs
+-+
+-+Before opening an issue, check [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) and search existing issues. A good report includes:
+-+
+-+- Device model, Android version, and CPU (`adb shell getprop ro.product.cpu.abilist`)
+-+- Android System WebView version
+-+- NeverMore version
+-+- What you expected and what happened
+-+- Logcat output captured while the problem occurs:
+-+  ```bash
+-+  adb logcat -s NeverMore BraveEngine
+-+  ```
+-+
+-+> 🔒 Security problems should **not** go in public issues. See [SECURITY.md](SECURITY.md).
+-+
+-+## Development setup
+-+
+-+1. Fork the repo and clone your fork.
+-+2. Install JDK 17+ and the Android SDK (API 35).
+-+3. Build: `./gradlew assembleDebug`
+-+4. Install: `adb install -r app/build/outputs/apk/debug/app-debug.apk`
+-+
+-+You only need Rust and the NDK if you change the native library. See [docs/BUILDING.md](docs/BUILDING.md).
+-+
+-+## Making changes
+-+
+-+1. Create a branch from `main`: `git checkout -b fix/short-description`
+-+2. Make your change, keeping it focused. One topic per pull request is easiest to review.
+-+3. Build and test on a device or emulator when you can. Say in the PR what you tested.
+-+4. Commit with a clear message (see below).
+-+5. Open a pull request and fill in the template.
+-+
+-+### Commit messages
+-+
+-+Use a short summary in the imperative mood, about 70 characters or fewer:
+-+
+-+```
+-+Fix pruning of adSlots in /next responses
+-+```
+-+
+-+Add a blank line and more detail if the *why* isn't obvious.
+-+
+-+### Code style
+-+
+-+- **Kotlin:** follow the [Kotlin coding conventions](https://kotlinlang.org/docs/coding-conventions.html). Keep functions small and comment the non-obvious.
+-+- **JavaScript (`yt_adblock.js`):** ES5-style syntax (`var`, no arrow functions) so it runs on old TV WebViews. Wrap risky code in `try/catch`. A bug in this script must never break the page.
+-+- **Rust:** run `cargo fmt` and `cargo clippy`.
+-+- Don't add analytics, tracking, or network calls to third-party services. See [PRIVACY.md](PRIVACY.md).
+-+
+-+### Important: the native library and package name
+-+
+-+The Rust library's JNI function names include the Kotlin package and class (`Java_com_bravetv_app_BraveEngine_*`). If you rename either, you must update `native/src/lib.rs` **and rebuild all `.so` files**, or ad blocking will silently stop working. Include the rebuilt libraries in the same pull request.
+-+
+-+## Updating the YouTube ad pruning
+-+
+-+When ads reappear, the usual cause is YouTube renaming a field. To investigate:
+-+
+-+1. Capture a player response (`/youtubei/v1/player` or `/next`) in a desktop browser's dev tools.
+-+2. Look for the keys that describe ads and compare them with `AD_KEYS` / `AD_ITEM_KEYS` in `yt_adblock.js`.
+-+3. Update the lists, test on a TV, and open a PR describing what changed.
+-+
+-+[uBlock Origin's scriptlets](https://github.com/gorhill/uBlock/wiki/Resources-Library) are a good reference for current patterns.
+-+
+-+## Licensing of contributions
+-+
+-+By submitting a contribution, you agree that it is licensed under the project's [MIT License](LICENSE), and that you have the right to submit it. Do not copy code from sources with incompatible licenses (for example GPL code) into the MIT-licensed parts of the project. If you are unsure, ask in the pull request.
+-+
+-+## Questions?
+-+
+-+Open a discussion or an issue. We're happy to help new contributors get started.
+-diff --git a/DISCLAIMER.md b/DISCLAIMER.md
+-new file mode 100644
+-index 0000000..5a33471
+---- /dev/null
+-+++ b/DISCLAIMER.md
+-@@ -0,0 +1,35 @@
+-+# Disclaimer
+-+
+-+*Last updated: October 2026. This document is general information, not legal advice. If you plan to distribute NeverMore widely, consult a qualified lawyer in your jurisdiction.*
+-+
+-+## 1. Personal use and third-party terms
+-+
+-+NeverMore is a tool that blocks ads and trackers on web pages you choose to open. Many websites and services, including YouTube, prohibit ad blocking or modified clients in their terms of service. **You are responsible for reading and following the terms of any service you use with NeverMore.** Using it may lead to warnings, reduced functionality, or restrictions on your account with those services. The authors are not responsible for any such consequences.
+-+
+-+NeverMore is intended for personal, non-commercial use on devices you own.
+-+
+-+## 2. No affiliation and trademarks
+-+
+-+NeverMore is an independent, community project. It is **not** affiliated with, endorsed by, or sponsored by Brave Software, Google LLC, YouTube, Twitch, JioHotstar or any other company.
+-+
+-+"Brave", "adblock-rust", "YouTube", "Google", "Google TV", "Android TV", "Fire TV", "Twitch" and "Hotstar" are trademarks or registered trademarks of their respective owners. They appear in this project only to describe compatibility or to credit the software it uses.
+-+
+-+## 3. Content and copyright
+-+
+-+NeverMore does not host, store, copy, or distribute any video, audio, or other content. It only loads websites in a standard Android WebView and filters the requests those pages make. Respect the rights of content owners. Do not use NeverMore to access content you are not entitled to view.
+-+
+-+## 4. No warranty
+-+
+-+NeverMore is provided **"as is"**, without warranty of any kind, express or implied, including but not limited to warranties of merchantability, fitness for a particular purpose, and non-infringement, as set out in the [MIT License](LICENSE). Ad blocking is not guaranteed to work. Services change frequently and may stop working with NeverMore at any time.
+-+
+-+## 5. Limitation of liability
+-+
+-+To the maximum extent permitted by law, the authors and contributors are not liable for any claim, damages, or other liability arising from the use of, or inability to use, NeverMore. This includes loss of data, account restrictions, or damage to devices.
+-+
+-+## 6. Third-party software
+-+
+-+NeverMore includes or downloads third-party software and filter lists under their own licenses. See [NOTICE](NOTICE). Filter lists are maintained by independent communities. The NeverMore project does not control their content and is not responsible for rules that wrongly block or allow content.
+-+
+-+## 7. Takedown and concerns
+-+
+-+If you are a rights holder and believe something in this repository infringes your rights, please open an issue or contact the maintainer through their GitHub profile, and we will review it promptly.
+-diff --git a/PRIVACY.md b/PRIVACY.md
+-new file mode 100644
+-index 0000000..1c1ce85
+---- /dev/null
+-+++ b/PRIVACY.md
+-@@ -0,0 +1,35 @@
+-+# Privacy
+-+
+-+*Last updated: October 2026.*
+-+
+-+NeverMore is built to respect your privacy. This page explains what the app does and doesn't do with data. It describes the code in this repository. If you install a build from somewhere else, you are trusting that build's publisher.
+-+
+-+## What NeverMore does not do
+-+
+-+- It has **no analytics, no tracking, no ads of its own, and no crash reporting**.
+-+- It has **no user accounts** and does not ask for your name, email, or location.
+-+- It does not collect, store, or send your browsing history, watch history, or the pages you open to the NeverMore developers. There are no NeverMore servers.
+-+
+-+## What the app connects to
+-+
+-+| Connection | Why | What is sent |
+-+|---|---|---|
+-+| Filter list hosts: `easylist.to`, `raw.githubusercontent.com` (uBlock Origin, Brave lists) | Download and refresh ad-blocking rules (about once every 24 hours) | A normal HTTPS request, which exposes your IP address to those hosts, like any download |
+-+| The websites you open (for example `youtube.com`, `twitch.tv`) | To show you the site | Normal web traffic, exactly as in any browser |
+-+
+-+Network requests that match the filters are blocked on your device and never leave it.
+-+
+-+## What is stored on your device
+-+
+-+- **Filter lists** are cached in the app's private storage so the app can start quickly and work offline.
+-+- **Website data** such as cookies, local storage and cache is stored by the Android WebView in the app's private storage, as in any browser. This is how sites keep you signed in. Signing in happens on the site itself. NeverMore never sees your password.
+-+
+-+To remove all of it, clear the app's data in Android **Settings → Apps → NeverMore → Storage → Clear data**, or uninstall the app.
+-+
+-+## Third-party services
+-+
+-+Sites you open have their own privacy policies, and they apply when you use them through NeverMore. NeverMore's blocking reduces tracking but cannot make a site stop tracking you entirely, especially if you are signed in.
+-+
+-+## Changes and questions
+-+
+-+If this policy changes, the new version will be committed to this repository, so the full history is public. For questions, [open an issue](https://github.com/Someshog/NeverMore/issues).
+-diff --git a/README.md b/README.md
+-index 3c6b13f..08b0627 100644
+---- a/README.md
+-+++ b/README.md
+-@@ -1,112 +1,100 @@
+-+<div align="center">
+-+
+- # NeverMore 📺🛡️
+- 
+--**NeverMore** is an open-source, ad-blocking web app launcher for **Android TV**, **Google TV** and Leanback-compatible devices. Open YouTube TV, Twitch and other streaming sites in a TV-friendly WebView, with ad and tracker blocking built in.
+-+**Open-source, ad-blocking web app launcher for Android TV.**
+- 
+--It uses the [`adblock-rust`](https://github.com/brave/adblock-rust) filtering engine (the same engine Brave's browser uses) together with EasyList, uBlock Origin and Brave filter lists.
+-+Open YouTube TV, Twitch and other streaming sites on the big screen with ad and tracker blocking built in, powered by the same filtering engine Brave uses.
+- 
+--> **Personal use only.** Blocking ads on YouTube is against YouTube's Terms of Service. You use this software at your own risk. It is intended to be sideloaded for personal use, and it will not be accepted on Google Play. To support creators, consider YouTube Premium.
+-->
+--> NeverMore is an independent project. It is not affiliated with Brave Software, Google or YouTube.
+-+[![Build](https://github.com/Someshog/NeverMore/actions/workflows/build.yml/badge.svg)](https://github.com/Someshog/NeverMore/actions/workflows/build.yml)
+-+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+-+![Platform](https://img.shields.io/badge/platform-Android%20TV%20%7C%20Google%20TV%20%7C%20Fire%20TV-3ddc84)
+-+![Min SDK](https://img.shields.io/badge/minSdk-23-informational)
+-+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+- 
+-----
+-+[Features](#-features) · [Quick start](#-quick-start) · [How it works](#-how-it-works) · [Docs](#-documentation) · [Contributing](#-contributing) · [Legal](#%EF%B8%8F-legal)
+- 
+--## ✨ Features
+--
+--- 🛋️ **TV-first**: Leanback launcher banner and D-pad remote navigation.
+--- ⚡ **Native ad-block engine**: Rust JNI bindings to `adblock-rust` with fast rule matching for EasyList, uBlock Origin and Brave lists.
+--- 🛡️ **Layered ad blocking**:
+--  1. **Network layer**: blocks ad networks, telemetry and trackers before requests leave the device, plus YouTube's own ad endpoints.
+--  2. **Ad data pruning**: a script injected at document start (`assets/yt_adblock.js`) removes ad fields (`adPlacements`, `playerAds`, `adSlots`) from YouTube's player responses, so the player has no ads to play.
+--  3. **Player fallback**: mutes and skips ads that still reach the player, and clicks skip buttons.
+--  4. **Stream allowlist**: protects video CDN streams (`googlevideo.com`) and player scripts so playback doesn't break.
+--  5. **HLS cleaner**: strips `#EXT-X-CUE-OUT` / SCTE-35 ad markers from `.m3u8` playlists on other sites.
+--  6. **Cosmetic filtering**: hides leftover ad elements with CSS.
+--- 🖥️ **Smart TV user agent** so sites load their 10-foot TV interfaces.
+--- 🎮 **Remote support**: media keys (play/pause) and back navigation.
+--- 📦 **Prebuilt native libraries** for `armeabi-v7a`, `arm64-v8a`, `x86` and `x86_64`.
+-+</div>
+- 
+- ---
+- 
+--## 🏗️ Architecture
+-+> **Personal use only.** Blocking ads on YouTube is against YouTube's Terms of Service, and you use NeverMore at your own risk. It is meant to be sideloaded for personal use and is not available on Google Play. If you enjoy a creator's work, consider supporting them directly or subscribing to YouTube Premium. Please read the [Disclaimer](DISCLAIMER.md).
+- 
+--```
+--┌────────────────────────────────────────────────────────┐
+--│                  NeverMore Android App                 │
+--├──────────────────────────┬─────────────────────────────┤
+--│      MainActivity        │     TvWebViewActivity       │
+--│  (Compose TV launcher)   │  (10-ft WebView container)  │
+--├──────────────────────────┴─────────────────────────────┤
+--│                 AdBlockWebViewClient                   │
+--│   • YouTube essential allowlist + ad endpoint blocking │
+--│   • HLS manifest SCTE-35 / CUE-OUT cleaner             │
+--│   • Cosmetic CSS injection                             │
+--├────────────────────────────────────────────────────────┤
+--│        yt_adblock.js (injected at document start)      │
+--│   • Prunes ad data from fetch / XHR / JSON.parse       │
+--│   • Player-level ad skip fallback                      │
+--├────────────────────────────────────────────────────────┤
+--│                     BraveEngine                        │
+--│   • Background list caching and daily updates          │
+--├────────────────────────────────────────────────────────┤
+--│                 libadblock_jni.so (Rust)               │
+--└────────────────────────────────────────────────────────┘
+--```
+--
+--> The class name `BraveEngine` and package `com.bravetv.app` are historical. They are part of the native library's JNI function names, so renaming them requires rebuilding the native library (see below).
+-+## ✨ Features
+- 
+-----
+-+- 🛋️ **Built for the couch.** Leanback launcher, D-pad navigation, media-key support, and a smart-TV user agent so sites load their 10-foot interfaces.
+-+- ⚡ **Fast native filtering.** Rust bindings to [`adblock-rust`](https://github.com/brave/adblock-rust), with EasyList, uBlock Origin and Brave lists, refreshed daily.
+-+- 🎯 **Targets in-stream ads.** Strips ad data from YouTube's player responses before the player sees it, with a player-level skip as a backup.
+-+- 🧹 **Cleaner pages.** Cosmetic filtering hides leftover ad elements.
+-+- 🛡️ **Safe by default.** An allowlist keeps video streams and player scripts from being blocked by mistake.
+-+- 🔒 **No accounts, no analytics.** NeverMore doesn't phone home. See [PRIVACY.md](PRIVACY.md).
+-+- 📦 **Wide device support.** Prebuilt native libraries for `armeabi-v7a`, `arm64-v8a`, `x86` and `x86_64`.
+- 
+--## 🚀 Getting started
+-+## 🚀 Quick start
+- 
+--### Prerequisites
+-+### Install a prebuilt APK
+- 
+--- Android Studio (recent version)
+--- Android SDK (min SDK 23, target SDK 35)
+--- JDK 17+
+--- *(Optional)* Rust and `cargo-ndk`, only if you modify `native/`. Prebuilt libraries are already in `app/src/main/jniLibs/`.
+-+1. Download the latest APK from the [Releases](https://github.com/Someshog/NeverMore/releases) page.
+-+2. Enable **Developer options → USB/Network debugging** on your TV.
+-+3. Install it:
+-+   ```bash
+-+   adb connect <TV_IP_ADDRESS>:5555
+-+   adb install -r NeverMore.apk
+-+   ```
+-+4. Open **NeverMore** from your TV's app row.
+- 
+--### Build
+-+### Build from source
+- 
+- ```bash
+-+git clone https://github.com/Someshog/NeverMore.git
+-+cd NeverMore
+- ./gradlew assembleDebug        # Windows: .\gradlew assembleDebug
+- ```
+--The APK is at `app/build/outputs/apk/debug/app-debug.apk`.
+- 
+--### Install on Android TV
+-+The APK is written to `app/build/outputs/apk/debug/app-debug.apk`. Requirements are JDK 17+ and the Android SDK (API 35). Full instructions, including rebuilding the native library, are in [docs/BUILDING.md](docs/BUILDING.md).
+- 
+--```bash
+--adb connect <TV_IP_ADDRESS>:5555
+--adb install -r app/build/outputs/apk/debug/app-debug.apk
+--adb shell am start -n com.bravetv.app/.MainActivity
+--```
+-+> **Which build does my TV need?** Run `adb shell getprop ro.product.cpu.abilist`. The APK includes libraries for all common CPUs, so one APK works on most devices.
+- 
+--Not sure which build your TV needs? Run `adb shell getprop ro.product.cpu.abilist`.
+-+## 🔍 How it works
+- 
+--### Rebuild the native library (optional)
+-+NeverMore blocks ads in layers, because no single technique is enough:
+- 
+--```bash
+--rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android i686-linux-android
+--cargo install cargo-ndk
+--cd native
+--cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 -t x86 -o ../app/src/main/jniLibs build --release
+--```
+-+| Layer | What it does |
+-+|---|---|
+-+| **Network filtering** | Checks each request against filter lists and blocks ad and tracker hosts, including YouTube's own ad endpoints. |
+-+| **Ad data pruning** | A script injected before the page loads removes `adPlacements`, `playerAds` and `adSlots` from API responses, so the player has no ads to play. |
+-+| **Player fallback** | If an ad still reaches the player, it is muted, skipped to the end, and any skip button is clicked. |
+-+| **Stream allowlist** | Protects video CDN traffic and player scripts so playback doesn't stall. |
+-+| **HLS cleaner** | Removes ad-break markers from `.m3u8` playlists on other sites. |
+-+| **Cosmetic filtering** | Hides leftover ad elements with CSS. |
+- 
+-----
+-+A deeper explanation is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+- 
+--## 🔧 Troubleshooting
+-+> **Heads up:** YouTube changes how it delivers ads every few weeks, so ad blocking can break without warning. When it does, please [open an issue](https://github.com/Someshog/NeverMore/issues/new/choose) with logcat output. Fixes usually only need small changes to the pruning script.
+- 
+--- **Ads still appear.** YouTube changes how it delivers ads often. Check `AD_KEYS` in `assets/yt_adblock.js`, and open an issue with `adb logcat -s NeverMore BraveEngine` output captured while an ad plays.
+--- **"DOCUMENT_START_SCRIPT unsupported" in logcat.** Update the TV's Android System WebView.
+--- **"Native library NOT available" in logcat.** The library for your device's CPU is missing. Build it for that ABI.
+-+## 📚 Documentation
+- 
+-----
+-+| Document | What's in it |
+-+|---|---|
+-+| [docs/BUILDING.md](docs/BUILDING.md) | Building the app and the native library, installing on a TV |
+-+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the app and its blocking layers fit together |
+-+| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Ads still showing, playback problems, logcat tips |
+-+| [CONTRIBUTING.md](CONTRIBUTING.md) | How to report bugs and submit changes |
+-+| [CHANGELOG.md](CHANGELOG.md) | What changed in each version |
+-+| [PRIVACY.md](PRIVACY.md) | What data the app does and doesn't touch |
+-+| [DISCLAIMER.md](DISCLAIMER.md) | Terms-of-service, trademark and warranty notices |
+-+| [SECURITY.md](SECURITY.md) | How to report a vulnerability |
+- 
+- ## 🤝 Contributing
+- 
+--Issues and pull requests are welcome. Please open an issue first for larger changes. Filter-list and scriptlet fixes are especially useful because YouTube changes frequently.
+-+Contributions of every size are welcome, from fixing a typo to updating the ad-pruning script when YouTube changes. Start with [CONTRIBUTING.md](CONTRIBUTING.md). Please also read our [Code of Conduct](CODE_OF_CONDUCT.md).
+- 
+-----
+-+## ⚖️ Legal
+-+
+-+- NeverMore is released under the [MIT License](LICENSE).
+-+- Third-party components keep their own licenses. See [NOTICE](NOTICE).
+-+- NeverMore is an independent project and is not affiliated with Brave Software, Google or YouTube. See [DISCLAIMER.md](DISCLAIMER.md).
+- 
+--## 📄 License
+-+## 🙏 Acknowledgements
+- 
+--NeverMore is licensed under the [MIT License](LICENSE). Third-party components keep their own licenses: see [NOTICE](NOTICE). `adblock-rust` is under MPL 2.0, and EasyList and uBlock filters have their own terms.
+-+NeverMore stands on the shoulders of [adblock-rust](https://github.com/brave/adblock-rust) by Brave, [EasyList](https://easylist.to), and [uBlock Origin's](https://github.com/gorhill/uBlock) filter lists and scriptlet ideas.
+-diff --git a/SECURITY.md b/SECURITY.md
+-new file mode 100644
+-index 0000000..bd68df4
+---- /dev/null
+-+++ b/SECURITY.md
+-@@ -0,0 +1,48 @@
+-+# Security Policy
+-+
+-+## Supported versions
+-+
+-+Security fixes go into the latest release and the `main` branch.
+-+
+-+| Version | Supported |
+-+|---|---|
+-+| Latest release | ✅ |
+-+| Older releases | ❌ |
+-+
+-+## Reporting a vulnerability
+-+
+-+**Please do not open a public issue for security problems.**
+-+
+-+Use GitHub's private reporting instead:
+-+
+-+1. Go to the [Security tab](https://github.com/Someshog/NeverMore/security) of this repository.
+-+2. Click **Report a vulnerability** and describe the problem.
+-+
+-+Helpful details to include:
+-+
+-+- What the issue is and what an attacker could do with it
+-+- Steps to reproduce, or a proof of concept
+-+- The app version and Android / WebView version
+-+- Any suggested fix
+-+
+-+You can expect an acknowledgement within about **7 days**. This is a volunteer-run project, so fix times vary, but we'll keep you updated and credit you in the release notes if you'd like.
+-+
+-+## Scope
+-+
+-+Examples of what we consider in scope:
+-+
+-+- Ways for a web page to escape the WebView sandbox through NeverMore's code (for example through an exposed JavaScript interface or unsafe intent handling)
+-+- Unsafe handling of downloaded filter lists or scripts (for example code execution from a tampered list)
+-+- Leaks of cookies, tokens, or other private data
+-+- Vulnerabilities in the native (Rust) library
+-+
+-+Out of scope:
+-+
+-+- Vulnerabilities in third-party sites or in Android System WebView itself (report those to the vendor)
+-+- YouTube or other services detecting or restricting ad blocking
+-+- Ads that still appear (please use a normal bug report)
+-+
+-+## Design notes
+-+
+-+- Remote filter lists are loaded with scriptlet permissions **disabled**, because they aren't authenticated Brave component payloads.
+-+- The ad-pruning script is bundled in the app and only injected into YouTube origins.
+-diff --git a/docs/ARCHITECTURE.md b/docs/ARCHITECTURE.md
+-new file mode 100644
+-index 0000000..cbef97e
+---- /dev/null
+-+++ b/docs/ARCHITECTURE.md
+-@@ -0,0 +1,90 @@
+-+# Architecture
+-+
+-+This page explains how NeverMore is put together and why ad blocking uses several layers.
+-+
+-+## Overview
+-+
+-+```
+-+┌────────────────────────────────────────────────────────┐
+-+│                  NeverMore Android App                 │
+-+├──────────────────────────┬─────────────────────────────┤
+-+│      MainActivity        │     TvWebViewActivity       │
+-+│  (Compose TV launcher)   │  (10-ft WebView container)  │
+-+├──────────────────────────┴─────────────────────────────┤
+-+│                 AdBlockWebViewClient                   │
+-+│   • Intercepts every request                           │
+-+│   • YouTube essential allowlist + ad endpoint blocking │
+-+│   • HLS manifest cleaner                               │
+-+│   • Cosmetic CSS injection                             │
+-+├────────────────────────────────────────────────────────┤
+-+│        yt_adblock.js (injected at document start)      │
+-+│   • Prunes ad data from fetch / XHR / JSON.parse       │
+-+│   • Player-level ad skip fallback                      │
+-+├────────────────────────────────────────────────────────┤
+-+│                     BraveEngine                        │
+-+│   • Downloads and caches filter lists                  │
+-+│   • Kotlin facade for the native library               │
+-+├────────────────────────────────────────────────────────┤
+-+│                 libadblock_jni.so (Rust)               │
+-+│   • adblock-rust: rule matching and cosmetic filters   │
+-+└────────────────────────────────────────────────────────┘
+-+```
+-+
+-+## Components
+-+
+-+### `MainActivity`
+-+A Jetpack Compose for TV launcher with shortcut cards. Choosing a service starts `TvWebViewActivity` with the site's URL.
+-+
+-+### `TvWebViewActivity`
+-+Hosts the WebView. It configures a smart-TV user agent, handles fullscreen video, D-pad back navigation and media keys, and injects `yt_adblock.js` with `WebViewCompat.addDocumentStartJavaScript` so the script runs **before any page script**.
+-+
+-+### `AdBlockWebViewClient`
+-+Overrides `shouldInterceptRequest` to look at each request:
+-+
+-+1. YouTube's own ad URLs (`/pagead/`, `/ptracking`, `/api/stats/ads`) and Google ad domains get an empty response.
+-+2. An **allowlist** protects essentials (`googlevideo.com`, player scripts, thumbnails) from being blocked by mistake.
+-+3. Everything else is checked against the filter lists through `BraveEngine`.
+-+4. `.m3u8` playlists are fetched and cleaned of ad-break markers (`#EXT-X-CUE-OUT`, SCTE-35).
+-+
+-+After a page loads it also injects cosmetic filters that hide leftover ad elements.
+-+
+-+### `BraveEngine`
+-+Downloads EasyList, uBlock Origin and Brave lists (cached for 24 hours, with a bundled offline fallback), builds the native engine, and exposes `shouldBlockUrl` and cosmetic filtering. Remote lists are loaded with scriptlet permissions **disabled**.
+-+
+-+### `native/` (Rust)
+-+A small JNI wrapper around [`adblock-rust`](https://github.com/brave/adblock-rust). The engine runs on a dedicated thread, and the app talks to it through opaque handles.
+-+
+-+### `assets/yt_adblock.js`
+-+Runs in the page before YouTube's code. See below.
+-+
+-+## Why several layers?
+-+
+-+Blocking by URL works for third-party ad servers, but YouTube serves most ads from its **own** domains, so a URL filter can't tell them apart from videos. The layers cover different cases:
+-+
+-+| Ad type | How it is delivered | What handles it |
+-+|---|---|---|
+-+| Third-party ads and trackers | Separate hosts | Network filtering |
+-+| YouTube client-side ads | Listed in the player's JSON response, then fetched separately | **Ad data pruning**: delete the list and there is nothing to play |
+-+| Ads stitched into the stream (SSAI) | Same video stream as the content | **Player fallback**: mute, skip to the end, click skip |
+-+| Ad-break markers in HLS streams | Playlist tags | HLS cleaner |
+-+| Leftover banners and overlays | Page elements | Cosmetic filtering |
+-+
+-+## Ad data pruning in detail
+-+
+-+`yt_adblock.js` wraps four places where YouTube's data can flow:
+-+
+-+1. **`fetch`**: clones the response for `/youtubei/v1/*` endpoints, deletes ad fields, and returns a new `Response`.
+-+2. **`XMLHttpRequest`**: prunes `response` / `responseText` for the same endpoints.
+-+3. **`JSON.parse`**: prunes anything that looks like player data.
+-+4. **`ytInitialPlayerResponse` / `ytInitialData`**: defines setters that prune the data embedded in the page.
+-+
+-+The fields removed are `adPlacements`, `playerAds`, `adSlots` and `adBreakHeartbeatParams`, plus sponsored feed items. This is the same idea as uBlock Origin's `json-prune` scriptlet.
+-+
+-+Every wrapper is wrapped in `try/catch` and returns the original value on error, so a bug in the script should never break playback.
+-+
+-+## Known limits
+-+
+-+- **YouTube changes often.** Field names and delivery methods change every few weeks, so expect to update the script.
+-+- **Stitched-in ads** can't be removed from the data. The fallback relies on spotting the ad in the page, and the TV interface's markup differs from the desktop site.
+-+- **Old WebViews** may not support `addDocumentStartJavaScript`. Update Android System WebView on the device.
+-+- **Native library per CPU.** If no library matches the device's CPU, the app runs without network filtering and logs a warning.
+-diff --git a/docs/BUILDING.md b/docs/BUILDING.md
+-new file mode 100644
+-index 0000000..15bb726
+---- /dev/null
+-+++ b/docs/BUILDING.md
+-@@ -0,0 +1,90 @@
+-+# Building NeverMore
+-+
+-+This guide covers building the app, rebuilding the native ad-block library, and installing on a TV.
+-+
+-+## Requirements
+-+
+-+| Tool | Version | Needed for |
+-+|---|---|---|
+-+| JDK | 17 or newer | Building the app |
+-+| Android SDK | API 35 (platform + build tools) | Building the app |
+-+| Android Studio | Recent stable (optional) | Easiest way to build and run |
+-+| Rust + `cargo-ndk` | Stable | **Only** if you change `native/` |
+-+| Android NDK | Recent (side-by-side) | **Only** if you change `native/` |
+-+
+-+Prebuilt `libadblock_jni.so` files are already in `app/src/main/jniLibs/` for `armeabi-v7a`, `arm64-v8a`, `x86` and `x86_64`, so most contributors never need Rust.
+-+
+-+## Build the app
+-+
+-+### Android Studio
+-+
+-+1. **File → Open…** and choose the project folder.
+-+2. Wait for Gradle to sync.
+-+3. Pick a TV device or emulator and click **Run**.
+-+
+-+### Command line
+-+
+-+```bash
+-+./gradlew assembleDebug          # Windows: .\gradlew assembleDebug
+-+```
+-+
+-+Output: `app/build/outputs/apk/debug/app-debug.apk`
+-+
+-+For a clean rebuild: `./gradlew clean assembleDebug`.
+-+
+-+### Release build
+-+
+-+```bash
+-+./gradlew assembleRelease
+-+```
+-+
+-+The release APK is **unsigned**. Sign it with your own keystore before installing or publishing, and **never commit a keystore or its passwords** to the repository.
+-+
+-+## Install on a TV
+-+
+-+1. On the TV, enable **Developer options** (tap *Build number* in *Settings → About* seven times) and turn on **USB debugging** or **Network debugging**.
+-+2. Connect and install:
+-+   ```bash
+-+   adb connect <TV_IP_ADDRESS>:5555
+-+   adb install -r app/build/outputs/apk/debug/app-debug.apk
+-+   adb shell am start -n com.bravetv.app/.MainActivity
+-+   ```
+-+3. If something looks stale after an update, uninstall first so cached filter lists and scripts are cleared:
+-+   ```bash
+-+   adb uninstall com.bravetv.app
+-+   ```
+-+
+-+## Which CPU does my TV use?
+-+
+-+```bash
+-+adb shell getprop ro.product.cpu.abilist
+-+```
+-+
+-+| Output includes | Library used |
+-+|---|---|
+-+| `arm64-v8a` | 64-bit ARM (most newer TVs and sticks) |
+-+| `armeabi-v7a` only | 32-bit ARM (older TVs, some Fire TV sticks) |
+-+| `x86` / `x86_64` | Emulators and some Intel devices |
+-+
+-+## Rebuild the native library
+-+
+-+You only need this when you change code in `native/`.
+-+
+-+1. Install Rust targets and `cargo-ndk`:
+-+   ```bash
+-+   rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android i686-linux-android
+-+   cargo install cargo-ndk
+-+   ```
+-+2. Install the NDK (Android Studio → *SDK Manager → SDK Tools → NDK (Side by side)*) and set `ANDROID_NDK_HOME` to its folder.
+-+3. Build all ABIs into `jniLibs`:
+-+   ```bash
+-+   cd native
+-+   cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 -t x86 -o ../app/src/main/jniLibs build --release
+-+   ```
+-+4. Rebuild the app. In logcat you should see `Native library load: success=true`.
+-+
+-+> ⚠️ **JNI names are tied to the package.** The functions in `native/src/lib.rs` are named `Java_com_bravetv_app_BraveEngine_*`. If you rename the Kotlin package or the `BraveEngine` class, rename the functions to match **and rebuild every ABI**, or the library will fail to load and ad blocking will silently turn off.
+-+
+-+## Continuous integration
+-+
+-+Every push and pull request is built by GitHub Actions (`.github/workflows/build.yml`). The debug APK is attached to each run as an artifact.
+-diff --git a/docs/TROUBLESHOOTING.md b/docs/TROUBLESHOOTING.md
+-new file mode 100644
+-index 0000000..c1b4d5d
+---- /dev/null
+-+++ b/docs/TROUBLESHOOTING.md
+-@@ -0,0 +1,52 @@
+-+# Troubleshooting
+-+
+-+Start by watching the logs while the problem happens:
+-+
+-+```bash
+-+adb logcat -s NeverMore BraveEngine
+-+```
+-+
+-+## Ads are still showing
+-+
+-+1. **Check that the native library loaded.** Look for `Native library load: success=true`. If you see `Native library NOT available — ad blocking disabled!`, no library matched your TV's CPU. Run `adb shell getprop ro.product.cpu.abilist` and see [BUILDING.md](BUILDING.md).
+-+2. **Check that the script was injected.** If logcat shows `DOCUMENT_START_SCRIPT unsupported on this WebView`, update **Android System WebView** (and Google Chrome, which provides it on some devices) from the Play Store or the device's settings.
+-+3. **Check the filter lists loaded.** Look for `Filter lists fetched: 4/4 non-empty` and `Engine initialized: ... ACTIVE`. If lists are empty, the TV may be offline or blocking `raw.githubusercontent.com` / `easylist.to`.
+-+4. **YouTube may have changed something.** Ads that return after working for a while usually mean a renamed field. Please [open an issue](https://github.com/Someshog/NeverMore/issues/new/choose) with logcat output captured while an ad plays.
+-+5. **Try a clean install.** Cached lists and scripts can go stale:
+-+   ```bash
+-+   adb uninstall com.bravetv.app
+-+   adb install app/build/outputs/apk/debug/app-debug.apk
+-+   ```
+-+
+-+## YouTube shows a warning or the video stalls
+-+
+-+YouTube can detect missing ad data and may show a warning, slow playback, or refuse to load. This usually clears after a script update. Try restarting the app, clearing app data (*Settings → Apps → NeverMore → Clear data*), and checking for a newer release.
+-+
+-+## The video won't play or the screen is black
+-+
+-+- Make sure Android System WebView is up to date.
+-+- Check logcat for `BLOCKED:` lines that include `googlevideo.com` or `youtube.com/s/player`. Those should never be blocked, so please report it.
+-+- If fullscreen is black, press **Back** once and retry.
+-+
+-+## YouTube loads the wrong interface
+-+
+-+NeverMore sets a smart-TV user agent so `youtube.com/tv` serves its TV interface. If a site renders badly, report the site and device. Some sites work better with a different user agent.
+-+
+-+## The app crashes at startup
+-+
+-+- Capture the crash with `adb logcat -b crash`.
+-+- Check that you installed an APK built for this version of the code (stale APKs can mismatch the native library).
+-+- If you rebuilt the native library after renaming the package, make sure you rebuilt **every** ABI.
+-+
+-+## Build problems
+-+
+-+| Symptom | Fix |
+-+|---|---|
+-+| Gradle can't find the SDK | Set `ANDROID_HOME` or create `local.properties` with `sdk.dir=...` |
+-+| `androidx.webkit` unresolved | **File → Sync Project with Gradle Files** |
+-+| `cargo ndk` can't find the NDK | Set `ANDROID_NDK_HOME` to your NDK folder |
+-+| `./gradlew: Permission denied` | `chmod +x gradlew` |
+-+
+-+## Still stuck?
+-+
+-+[Open an issue](https://github.com/Someshog/NeverMore/issues/new/choose) and include your device model, Android version, CPU ABI, WebView version, and the logcat output.
+diff --git a/nevermore-rebrand.patch b/nevermore-rebrand.patch
+deleted file mode 100644
+index cff70c8..0000000
+--- a/nevermore-rebrand.patch
++++ /dev/null
+@@ -1,545 +0,0 @@
+-diff --git a/LICENSE b/LICENSE
+-index 99332ad..c57c74e 100644
+---- a/LICENSE
+-+++ b/LICENSE
+-@@ -1,6 +1,6 @@
+- MIT License
+- 
+--Copyright (c) 2026 BraveTv Contributors
+-+Copyright (c) 2026 NeverMore Contributors
+- 
+- Permission is hereby granted, free of charge, to any person obtaining a copy
+- of this software and associated documentation files (the "Software"), to deal
+-diff --git a/NOTICE b/NOTICE
+-new file mode 100644
+-index 0000000..af9e591
+---- /dev/null
+-+++ b/NOTICE
+-@@ -0,0 +1,25 @@
+-+NeverMore
+-+Copyright (c) 2026 NeverMore Contributors. Licensed under the MIT License (see LICENSE).
+-+
+-+This project includes or downloads third-party software and data. Each remains
+-+under its own license, and those licenses apply to those parts only.
+-+
+-+1. adblock-rust (https://github.com/brave/adblock-rust)
+-+   Brave Software. Mozilla Public License 2.0.
+-+   Compiled into libadblock_jni.so (see native/). If you modify adblock-rust's own
+-+   files, MPL 2.0 requires you to publish those modifications.
+-+
+-+2. Filter lists, downloaded at runtime (and bundled as an offline fallback):
+-+   - EasyList (https://easylist.to): GPLv3+ / CC BY-SA 3.0
+-+   - uBlock Origin filters (https://github.com/uBlockOrigin/uAssets): GPLv3
+-+   - Brave adblock lists and resources (https://github.com/brave/adblock-lists,
+-+     https://github.com/brave/adblock-resources): MPL 2.0
+-+   The bundled copy is app/src/main/assets/easylist.txt. See the license terms of
+-+   each list before redistributing it.
+-+
+-+3. Android libraries (androidx, Jetpack Compose, TV Material): Apache License 2.0.
+-+
+-+NeverMore is an independent project. It is not affiliated with, endorsed by, or
+-+sponsored by Brave Software, Google, or YouTube. "Brave", "YouTube", "Google TV",
+-+"Android TV", "Twitch" and "Hotstar" are trademarks of their respective owners and
+-+are used only to describe compatibility.
+-diff --git a/README.md b/README.md
+-index 1711b17..3c6b13f 100644
+---- a/README.md
+-+++ b/README.md
+-@@ -1,22 +1,29 @@
+--# BraveTv 📺🛡️
+-+# NeverMore 📺🛡️
+- 
+--**BraveTv** is a privacy-first, ad-blocking Smart TV web app and streaming launcher designed for **Android TV**, **Google TV**, and Leanback-compatible devices.
+-+**NeverMore** is an open-source, ad-blocking web app launcher for **Android TV**, **Google TV** and Leanback-compatible devices. Open YouTube TV, Twitch and other streaming sites in a TV-friendly WebView, with ad and tracker blocking built in.
+- 
+--Powered by Brave's native `adblock-rust` filtering engine, BraveTv allows you to stream content from your favorite web streaming services (such as YouTube TV, Hotstar, Twitch, etc.) on the big screen with high-performance ad-blocking and clean video playback.
+-+It uses the [`adblock-rust`](https://github.com/brave/adblock-rust) filtering engine (the same engine Brave's browser uses) together with EasyList, uBlock Origin and Brave filter lists.
+-+
+-+> **Personal use only.** Blocking ads on YouTube is against YouTube's Terms of Service. You use this software at your own risk. It is intended to be sideloaded for personal use, and it will not be accepted on Google Play. To support creators, consider YouTube Premium.
+-+>
+-+> NeverMore is an independent project. It is not affiliated with Brave Software, Google or YouTube.
+- 
+- ---
+- 
+- ## ✨ Features
+- 
+--- 🛋️ **TV-First Experience**: Built for Android TV / Google TV with Leanback launcher banner and D-Pad remote navigation.
+--- ⚡ **Native Brave Ad-Block Engine**: Uses compiled Rust JNI bindings (`adblock-rust`) with high-speed rule matching for EasyList, uBlock Origin, and Brave filter lists.
+--- 🛡️ **Multi-Tier Ad Mitigation**:
+--  1. **Network Layer**: Blocks third-party ad networks, telemetry, and tracking endpoints before requests leave the device.
+--  2. **Smart Stream Allowlist**: Protects video CDN streams (`googlevideo.com`), essential player runtime scripts (`/s/player/`), and connectivity probes so video playback never breaks or stalls.
+--  3. **HLS Stream Cleanser**: Intercepts `.m3u8` playlists and strips `#EXT-X-CUE-OUT` / SCTE-35 ad break markers in real-time.
+--  4. **DOM Ad-Skipper & Cosmetic Filter**: Automatically dismisses overlays, fast-forwards in-stream ads, and injects cosmetic CSS hide rules.
+--- 🖥️ **Smart TV User-Agent**: Configured with a Smart TV User-Agent string to automatically load optimized 10-foot TV interfaces.
+--- 🎮 **Hardware Remote Integration**: Handles media keys (Play/Pause) and back navigation gracefully.
+-+- 🛋️ **TV-first**: Leanback launcher banner and D-pad remote navigation.
+-+- ⚡ **Native ad-block engine**: Rust JNI bindings to `adblock-rust` with fast rule matching for EasyList, uBlock Origin and Brave lists.
+-+- 🛡️ **Layered ad blocking**:
+-+  1. **Network layer**: blocks ad networks, telemetry and trackers before requests leave the device, plus YouTube's own ad endpoints.
+-+  2. **Ad data pruning**: a script injected at document start (`assets/yt_adblock.js`) removes ad fields (`adPlacements`, `playerAds`, `adSlots`) from YouTube's player responses, so the player has no ads to play.
+-+  3. **Player fallback**: mutes and skips ads that still reach the player, and clicks skip buttons.
+-+  4. **Stream allowlist**: protects video CDN streams (`googlevideo.com`) and player scripts so playback doesn't break.
+-+  5. **HLS cleaner**: strips `#EXT-X-CUE-OUT` / SCTE-35 ad markers from `.m3u8` playlists on other sites.
+-+  6. **Cosmetic filtering**: hides leftover ad elements with CSS.
+-+- 🖥️ **Smart TV user agent** so sites load their 10-foot TV interfaces.
+-+- 🎮 **Remote support**: media keys (play/pause) and back navigation.
+-+- 📦 **Prebuilt native libraries** for `armeabi-v7a`, `arm64-v8a`, `x86` and `x86_64`.
+- 
+- ---
+- 
+-@@ -24,113 +31,82 @@ Powered by Brave's native `adblock-rust` filtering engine, BraveTv allows you to
+- 
+- ```
+- ┌────────────────────────────────────────────────────────┐
+--│                   BraveTv Android App                  │
+-+│                  NeverMore Android App                 │
+- ├──────────────────────────┬─────────────────────────────┤
+- │      MainActivity        │     TvWebViewActivity       │
+--│  (Compose TV Launcher)   │  (10-ft WebView Container)  │
+-+│  (Compose TV launcher)   │  (10-ft WebView container)  │
+- ├──────────────────────────┴─────────────────────────────┤
+- │                 AdBlockWebViewClient                   │
+--│   • YouTube Essential Allowlist                        │
+--│   • HLS Manifest SCTE-35 / CUE-OUT Cleanser            │
+--│   • Cosmetic CSS Injection & DOM Ad-Skipper            │
+-+│   • YouTube essential allowlist + ad endpoint blocking │
+-+│   • HLS manifest SCTE-35 / CUE-OUT cleaner             │
+-+│   • Cosmetic CSS injection                             │
+-+├────────────────────────────────────────────────────────┤
+-+│        yt_adblock.js (injected at document start)      │
+-+│   • Prunes ad data from fetch / XHR / JSON.parse       │
+-+│   • Player-level ad skip fallback                      │
+- ├────────────────────────────────────────────────────────┤
+- │                     BraveEngine                        │
+--│   • Background rule caching & auto-updates             │
+--│   • EasyList / uBlock / Brave rule bundles             │
+-+│   • Background list caching and daily updates          │
+- ├────────────────────────────────────────────────────────┤
+- │                 libadblock_jni.so (Rust)               │
+--│   • High-speed regex / bloom filter matching           │
+- └────────────────────────────────────────────────────────┘
+- ```
+- 
+-----
+--
+--## 🚀 Getting Started
+--
+--### Prerequisites
+--
+--- **Android Studio** (Koala / Ladybug or newer recommended)
+--- **Android SDK** (Min SDK: 23 / Android 6.0, Target SDK: 35)
+--- **JDK 17+**
+--- *(Optional)* **Rust & `cargo-ndk`** — only required if modifying the native Rust engine in `native/`. Pre-compiled libraries for `arm64-v8a`, `x86`, and `x86_64` are already included in `app/src/main/jniLibs/`.
+-+> The class name `BraveEngine` and package `com.bravetv.app` are historical. They are part of the native library's JNI function names, so renaming them requires rebuilding the native library (see below).
+- 
+- ---
+- 
+--## 🛠️ Building from Source
+-+## 🚀 Getting started
+- 
+--### Using Android Studio
+-+### Prerequisites
+- 
+--1. Open Android Studio.
+--2. Select **File → Open...** and choose the `braveTv` folder.
+--3. Allow Gradle to sync dependencies.
+--4. Select your target TV device or emulator in the device selector.
+--5. Click **Run** (`Shift + F10`) or navigate to **Build → Build Bundle(s) / APK(s) → Build APK(s)**.
+-+- Android Studio (recent version)
+-+- Android SDK (min SDK 23, target SDK 35)
+-+- JDK 17+
+-+- *(Optional)* Rust and `cargo-ndk`, only if you modify `native/`. Prebuilt libraries are already in `app/src/main/jniLibs/`.
+- 
+--### Using Command Line (Gradle)
+-+### Build
+- 
+--#### Build Debug APK:
+- ```bash
+--# Windows
+--.\gradlew assembleDebug
+--
+--# Linux / macOS
+--./gradlew assembleDebug
+--```
+--The output APK will be located at:
+--```
+--app/build/outputs/apk/debug/app-debug.apk
+-+./gradlew assembleDebug        # Windows: .\gradlew assembleDebug
+- ```
+-+The APK is at `app/build/outputs/apk/debug/app-debug.apk`.
+- 
+--#### Build Release APK:
+--```bash
+--# Windows
+--.\gradlew assembleRelease
+-+### Install on Android TV
+- 
+--# Linux / macOS
+--./gradlew assembleRelease
+--```
+--The output APK will be located at:
+--```
+--app/build/outputs/apk/release/app-release-unsigned.apk
+-+```bash
+-+adb connect <TV_IP_ADDRESS>:5555
+-+adb install -r app/build/outputs/apk/debug/app-debug.apk
+-+adb shell am start -n com.bravetv.app/.MainActivity
+- ```
+- 
+-----
+--
+--## 📲 Installation / Sideloading onto Android TV
+-+Not sure which build your TV needs? Run `adb shell getprop ro.product.cpu.abilist`.
+- 
+--You can install the APK directly to any Android TV device or emulator using `adb`:
+-+### Rebuild the native library (optional)
+- 
+- ```bash
+--# Connect to your Android TV (ensure ADB Debugging is enabled on TV)
+--adb connect <YOUR_TV_IP_ADDRESS>:5555
+--
+--# Install the APK
+--adb install -r app/build/outputs/apk/debug/app-debug.apk
+--
+--# Launch the app
+--adb shell am start -n com.bravetv.app/.MainActivity
+-+rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android i686-linux-android
+-+cargo install cargo-ndk
+-+cd native
+-+cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 -t x86 -o ../app/src/main/jniLibs build --release
+- ```
+- 
+- ---
+- 
+--## 🦀 Rebuilding the Native Rust Library (Optional)
+-+## 🔧 Troubleshooting
+-+
+-+- **Ads still appear.** YouTube changes how it delivers ads often. Check `AD_KEYS` in `assets/yt_adblock.js`, and open an issue with `adb logcat -s NeverMore BraveEngine` output captured while an ad plays.
+-+- **"DOCUMENT_START_SCRIPT unsupported" in logcat.** Update the TV's Android System WebView.
+-+- **"Native library NOT available" in logcat.** The library for your device's CPU is missing. Build it for that ABI.
+-+
+-+---
+- 
+--If you modify the Rust engine located in `native/`:
+-+## 🤝 Contributing
+- 
+--1. Install Rust and `cargo-ndk`:
+--   ```bash
+--   rustup target add aarch64-linux-android x86_64-linux-android
+--   cargo install cargo-ndk
+--   ```
+--2. Build and output directly into `app/src/main/jniLibs/`:
+--   ```bash
+--   cd native
+--   cargo ndk -t arm64-v8a -t x86_64 -o ../app/src/main/jniLibs build --release
+--   ```
+-+Issues and pull requests are welcome. Please open an issue first for larger changes. Filter-list and scriptlet fixes are especially useful because YouTube changes frequently.
+- 
+- ---
+- 
+- ## 📄 License
+- 
+--This project is licensed under the [MIT License](LICENSE).
+--Brave's `adblock-rust` library is subject to its respective upstream Mozilla Public License (MPL 2.0).
+-+NeverMore is licensed under the [MIT License](LICENSE). Third-party components keep their own licenses: see [NOTICE](NOTICE). `adblock-rust` is under MPL 2.0, and EasyList and uBlock filters have their own terms.
+-diff --git a/app/src/main/AndroidManifest.xml b/app/src/main/AndroidManifest.xml
+-index d599597..dd899e4 100644
+---- a/app/src/main/AndroidManifest.xml
+-+++ b/app/src/main/AndroidManifest.xml
+-@@ -7,7 +7,7 @@
+- 
+-     <application
+-         android:allowBackup="false"
+--        android:label="braveTv"
+-+        android:label="NeverMore"
+-         android:banner="@drawable/tv_banner"
+-         android:supportsRtl="true"
+-         android:theme="@android:style/Theme.Material.NoActionBar"
+-diff --git a/app/src/main/java/com/bravetv/app/AdBlockWebViewClient.kt b/app/src/main/java/com/bravetv/app/AdBlockWebViewClient.kt
+-index 413c540..0c71c3d 100644
+---- a/app/src/main/java/com/bravetv/app/AdBlockWebViewClient.kt
+-+++ b/app/src/main/java/com/bravetv/app/AdBlockWebViewClient.kt
+-@@ -75,7 +75,7 @@ class AdBlockWebViewClient : WebViewClient() {
+- 
+-     override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: android.webkit.WebResourceError?) {
+-         super.onReceivedError(view, request, error)
+--        android.util.Log.e("BraveTv", "WebView error loading ${request?.url}: ${error?.description}")
+-+        android.util.Log.e("NeverMore", "WebView error loading ${request?.url}: ${error?.description}")
+-     }
+- 
+-     override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest): WebResourceResponse? {
+-@@ -90,7 +90,7 @@ class AdBlockWebViewClient : WebViewClient() {
+-             return emptyResponse()
+-         }
+-         if (!request.isForMainFrame && !isYouTubeEssentialUrl(url) && BraveEngine.shouldBlockUrl(url, sourceUrl, resourceType)) {
+--            android.util.Log.d("BraveTv", "BLOCKED: $url")
+-+            android.util.Log.d("NeverMore", "BLOCKED: $url")
+-             return emptyResponse()
+-         }
+-         val accept = request.requestHeaders.entries.firstOrNull { it.key.equals("Accept", true) }
+-diff --git a/app/src/main/java/com/bravetv/app/MainActivity.kt b/app/src/main/java/com/bravetv/app/MainActivity.kt
+-index 2dc31fd..ab5a3e8 100644
+---- a/app/src/main/java/com/bravetv/app/MainActivity.kt
+-+++ b/app/src/main/java/com/bravetv/app/MainActivity.kt
+-@@ -57,7 +57,7 @@ private fun HomeScreen(onOpen: (String, String) -> Unit) {
+-         verticalArrangement = Arrangement.spacedBy(36.dp)
+-     ) {
+-         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+--            Text("braveTv", fontSize = 42.sp, fontWeight = FontWeight.Bold, color = Color.White)
+-+            Text("NeverMore", fontSize = 42.sp, fontWeight = FontWeight.Bold, color = Color.White)
+-             Text("Your streaming apps, ready for the big screen", fontSize = 19.sp, color = Color(0xFFADB5C5))
+-         }
+-         Row(horizontalArrangement = Arrangement.spacedBy(28.dp), verticalAlignment = Alignment.CenterVertically) {
+-diff --git a/app/src/main/java/com/bravetv/app/TvWebViewActivity.kt b/app/src/main/java/com/bravetv/app/TvWebViewActivity.kt
+-index e61106e..5125a87 100644
+---- a/app/src/main/java/com/bravetv/app/TvWebViewActivity.kt
+-+++ b/app/src/main/java/com/bravetv/app/TvWebViewActivity.kt
+-@@ -26,7 +26,7 @@ class TvWebViewActivity : ComponentActivity() {
+-         hideSystemUi()
+- 
+-         val url = intent.getStringExtra(EXTRA_URL) ?: "https://www.youtube.com/tv"
+--        title = intent.getStringExtra(EXTRA_TITLE) ?: "braveTv"
+-+        title = intent.getStringExtra(EXTRA_TITLE) ?: "NeverMore"
+- 
+-         rootLayout = FrameLayout(this).apply {
+-             setBackgroundColor(Color.BLACK)
+-@@ -99,7 +99,7 @@ class TvWebViewActivity : ComponentActivity() {
+-                 setOf("https://www.youtube.com", "https://youtube.com", "https://m.youtube.com")
+-             )
+-         } else {
+--            android.util.Log.w("BraveTv", "DOCUMENT_START_SCRIPT unsupported on this WebView; update Android System WebView")
+-+            android.util.Log.w("NeverMore", "DOCUMENT_START_SCRIPT unsupported on this WebView; update Android System WebView")
+-         }
+-         webView.loadUrl(url)
+-     }
+-diff --git a/nevermore-adblock-fix.patch b/nevermore-adblock-fix.patch
+-deleted file mode 100644
+-index fa38146..0000000
+---- a/nevermore-adblock-fix.patch
+-+++ /dev/null
+-@@ -1,214 +0,0 @@
+--diff --git a/app/build.gradle.kts b/app/build.gradle.kts
+--index 2a418db..c9cb7cd 100644
+----- a/app/build.gradle.kts
+--+++ b/app/build.gradle.kts
+--@@ -27,6 +27,7 @@ android {
+-- 
+-- dependencies {
+--     implementation("androidx.core:core-ktx:1.13.1")
+--+    implementation("androidx.webkit:webkit:1.11.0")
+--     implementation("androidx.activity:activity-compose:1.9.1")
+--     implementation(platform("androidx.compose:compose-bom:2024.06.00"))
+--     implementation("androidx.compose.ui:ui")
+--diff --git a/app/src/main/assets/yt_adblock.js b/app/src/main/assets/yt_adblock.js
+--new file mode 100644
+--index 0000000..5d458dd
+----- /dev/null
+--+++ b/app/src/main/assets/yt_adblock.js
+--@@ -0,0 +1,132 @@
+--+/*
+--+ * Runs at document start (before YouTube's own scripts) and strips ad data out of
+--+ * YouTube API responses so the player never receives any ads to play.
+--+ * Same idea as uBlock Origin's json-prune / json-prune-fetch-response / set-constant scriptlets.
+--+ */
+--+(function () {
+--+  if (window.__ytAdPruneInstalled) return;
+--+  window.__ytAdPruneInstalled = true;
+--+
+--+  var AD_KEYS = ['adPlacements', 'playerAds', 'adSlots', 'adBreakHeartbeatParams'];
+--+  var AD_ITEM_KEYS = ['adSlotRenderer', 'promotedSparklesWebRenderer', 'displayAdRenderer', 'compactPromotedVideoRenderer'];
+--+  var API_RE = /\/youtubei\/v1\/(player|next|browse|get_watch|reel\/reel_item_watch|search)/;
+--+
+--+  function prune(node, depth) {
+--+    if (!node || typeof node !== 'object' || depth > 8) return node;
+--+    if (Array.isArray(node)) {
+--+      for (var i = node.length - 1; i >= 0; i--) {
+--+        var item = node[i];
+--+        if (item && typeof item === 'object' && hasAdItem(item)) {
+--+          node.splice(i, 1);
+--+        } else {
+--+          prune(item, depth + 1);
+--+        }
+--+      }
+--+      return node;
+--+    }
+--+    for (var k = 0; k < AD_KEYS.length; k++) {
+--+      if (AD_KEYS[k] in node) {
+--+        try { delete node[AD_KEYS[k]]; } catch (e) { node[AD_KEYS[k]] = undefined; }
+--+      }
+--+    }
+--+    for (var key in node) {
+--+      if (Object.prototype.hasOwnProperty.call(node, key)) prune(node[key], depth + 1);
+--+    }
+--+    return node;
+--+  }
+--+
+--+  function hasAdItem(item) {
+--+    for (var i = 0; i < AD_ITEM_KEYS.length; i++) {
+--+      if (AD_ITEM_KEYS[i] in item) return true;
+--+      // renderers are often wrapped one level down, e.g. {richItemRenderer:{content:{adSlotRenderer:{}}}}
+--+      var inner = item.richItemRenderer && item.richItemRenderer.content;
+--+      if (inner && AD_ITEM_KEYS[i] in inner) return true;
+--+    }
+--+    return false;
+--+  }
+--+
+--+  function looksLikePlayerData(obj) {
+--+    return obj && typeof obj === 'object' &&
+--+      (obj.streamingData || obj.playabilityStatus || obj.adPlacements || obj.playerAds || obj.contents || obj.playerResponse);
+--+  }
+--+
+--+  // 1. JSON.parse (covers pages that parse the response text themselves)
+--+  var origParse = JSON.parse;
+--+  JSON.parse = function () {
+--+    var result = origParse.apply(this, arguments);
+--+    try { if (looksLikePlayerData(result)) prune(result, 0); } catch (e) {}
+--+    return result;
+--+  };
+--+
+--+  // 2. fetch (covers Response.json(), which does NOT go through JSON.parse)
+--+  var origFetch = window.fetch;
+--+  if (origFetch) {
+--+    window.fetch = function (input, init) {
+--+      var url = typeof input === 'string' ? input : (input && input.url) || '';
+--+      var p = origFetch.apply(this, arguments);
+--+      if (!API_RE.test(url)) return p;
+--+      return p.then(function (res) {
+--+        try {
+--+          return res.clone().text().then(function (text) {
+--+            var data;
+--+            try { data = origParse(text); } catch (e) { return res; }
+--+            prune(data, 0);
+--+            var headers = new Headers(res.headers);
+--+            headers.delete('content-length');
+--+            return new Response(JSON.stringify(data), { status: res.status, statusText: res.statusText, headers: headers });
+--+          });
+--+        } catch (e) { return res; }
+--+      });
+--+    };
+--+  }
+--+
+--+  // 3. XMLHttpRequest (YouTube TV historically uses XHR for some calls)
+--+  var xhrOpen = XMLHttpRequest.prototype.open;
+--+  XMLHttpRequest.prototype.open = function (method, url) {
+--+    this.__ytUrl = String(url || '');
+--+    return xhrOpen.apply(this, arguments);
+--+  };
+--+  ['response', 'responseText'].forEach(function (prop) {
+--+    var desc = Object.getOwnPropertyDescriptor(XMLHttpRequest.prototype, prop);
+--+    if (!desc || !desc.get) return;
+--+    Object.defineProperty(XMLHttpRequest.prototype, prop, {
+--+      configurable: true,
+--+      get: function () {
+--+        var value = desc.get.call(this);
+--+        if (!this.__ytUrl || !API_RE.test(this.__ytUrl) || typeof value !== 'string' || !value) return value;
+--+        try {
+--+          var data = origParse(value);
+--+          prune(data, 0);
+--+          return JSON.stringify(data);
+--+        } catch (e) { return value; }
+--+      }
+--+    });
+--+  });
+--+
+--+  // 4. Initial player response embedded in the page HTML
+--+  ['ytInitialPlayerResponse', 'ytInitialData'].forEach(function (name) {
+--+    var stored;
+--+    try {
+--+      Object.defineProperty(window, name, {
+--+        configurable: true,
+--+        get: function () { return stored; },
+--+        set: function (v) { try { prune(v, 0); } catch (e) {} stored = v; }
+--+      });
+--+    } catch (e) {}
+--+  });
+--+
+--+  // 5. Fallback for anything that still slips through: skip the ad at the player level.
+--+  function skipFallback() {
+--+    var video = document.querySelector('video');
+--+    var player = document.getElementById('movie_player') || document.querySelector('.html5-video-player');
+--+    var adShowing = player && (player.classList.contains('ad-showing') || player.classList.contains('ad-interrupting'));
+--+    if (video && adShowing && isFinite(video.duration) && video.duration > 0) {
+--+      video.muted = true;
+--+      video.playbackRate = 16;
+--+      video.currentTime = video.duration;
+--+    }
+--+    var skip = document.querySelector('.ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-ad-skip-button-modern');
+--+    if (skip && skip.offsetParent !== null) skip.click();
+--+  }
+--+  setInterval(skipFallback, 250);
+--+})();
+--diff --git a/app/src/main/java/com/bravetv/app/AdBlockWebViewClient.kt b/app/src/main/java/com/bravetv/app/AdBlockWebViewClient.kt
+--index 0ed4127..413c540 100644
+----- a/app/src/main/java/com/bravetv/app/AdBlockWebViewClient.kt
+--+++ b/app/src/main/java/com/bravetv/app/AdBlockWebViewClient.kt
+--@@ -86,6 +86,9 @@ class AdBlockWebViewClient : WebViewClient() {
+--         // Use sourcePageUrl (a @Volatile field updated safely on any thread) instead.
+--         val sourceUrl = if (request.isForMainFrame) url else sourcePageUrl ?: url
+--         val resourceType = resourceType(request)
+--+        if (!request.isForMainFrame && isYouTubeAdUrl(url)) {
+--+            return emptyResponse()
+--+        }
+--         if (!request.isForMainFrame && !isYouTubeEssentialUrl(url) && BraveEngine.shouldBlockUrl(url, sourceUrl, resourceType)) {
+--             android.util.Log.d("BraveTv", "BLOCKED: $url")
+--             return emptyResponse()
+--@@ -132,6 +135,16 @@ class AdBlockWebViewClient : WebViewClient() {
+--         }
+--     }
+-- 
+--+    /** YouTube's own ad serving/tracking endpoints. These live on youtube.com so generic lists miss them. */
+--+    private fun isYouTubeAdUrl(url: String): Boolean =
+--+        "youtube.com/pagead/" in url ||
+--+            "youtube.com/api/stats/ads" in url ||
+--+            "youtube.com/ptracking" in url ||
+--+            "youtube.com/api/stats/atr" in url ||
+--+            "doubleclick.net" in url ||
+--+            "googleadservices.com" in url ||
+--+            "googlesyndication.com" in url
+--+
+--     private fun emptyResponse() = WebResourceResponse(
+--         "text/plain", "UTF-8", 204, "Blocked",
+--         mapOf("Cache-Control" to "no-store"), ByteArrayInputStream(ByteArray(0))
+--diff --git a/app/src/main/java/com/bravetv/app/TvWebViewActivity.kt b/app/src/main/java/com/bravetv/app/TvWebViewActivity.kt
+--index b66d430..e61106e 100644
+----- a/app/src/main/java/com/bravetv/app/TvWebViewActivity.kt
+--+++ b/app/src/main/java/com/bravetv/app/TvWebViewActivity.kt
+--@@ -10,6 +10,8 @@ import android.webkit.WebView
+-- import android.widget.FrameLayout
+-- import androidx.activity.ComponentActivity
+-- import android.graphics.Color
+--+import androidx.webkit.WebViewCompat
+--+import androidx.webkit.WebViewFeature
+-- 
+-- class TvWebViewActivity : ComponentActivity() {
+--     private lateinit var webView: WebView
+--@@ -86,6 +88,19 @@ class TvWebViewActivity : ComponentActivity() {
+--         rootLayout.addView(webView)
+--         setContentView(rootLayout)
+--         BraveEngine.initializeBraveShields(applicationContext)
+--+
+--+        // Inject the ad-pruning script BEFORE any YouTube script runs. evaluateJavascript in
+--+        // onPageStarted is too late: the player has already requested/parsed its ad data by then.
+--+        if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+--+            val adPruneJs = assets.open("yt_adblock.js").bufferedReader().use { it.readText() }
+--+            WebViewCompat.addDocumentStartJavaScript(
+--+                webView,
+--+                adPruneJs,
+--+                setOf("https://www.youtube.com", "https://youtube.com", "https://m.youtube.com")
+--+            )
+--+        } else {
+--+            android.util.Log.w("BraveTv", "DOCUMENT_START_SCRIPT unsupported on this WebView; update Android System WebView")
+--+        }
+--         webView.loadUrl(url)
+--     }
+-- 
+-diff --git a/settings.gradle.kts b/settings.gradle.kts
+-index d5e4a08..10aea28 100644
+---- a/settings.gradle.kts
+-+++ b/settings.gradle.kts
+-@@ -10,5 +10,5 @@ dependencyResolutionManagement {
+-     repositories { google(); mavenCentral() }
+- }
+- 
+--rootProject.name = "braveTv"
+-+rootProject.name = "NeverMore"
+- include(":app")

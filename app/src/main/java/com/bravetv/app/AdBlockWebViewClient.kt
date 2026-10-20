@@ -18,21 +18,12 @@ class AdBlockWebViewClient : WebViewClient() {
     override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
         if (!url.isNullOrBlank()) sourcePageUrl = url
         super.onPageStarted(view, url, favicon)
-        // Inject ad-skipper as early as possible (before YouTube renders the player)
-        if (url != null && (url.contains("youtube.com") || url.contains("youtu.be"))) {
-            view?.evaluateJavascript(YOUTUBE_AD_SKIP_JS, null)
-        }
     }
 
     override fun onPageFinished(view: WebView?, url: String?) {
         super.onPageFinished(view, url)
         if (view == null || url.isNullOrBlank()) return
         sourcePageUrl = url
-
-        // Re-inject on every navigation (YouTube TV is a SPA — URL changes without full reload)
-        if (url.contains("youtube.com") || url.contains("youtu.be")) {
-            view.evaluateJavascript(YOUTUBE_AD_SKIP_JS, null)
-        }
 
         runCatching { BraveEngine.getCosmeticResources(url) }
             .getOrNull()
@@ -345,68 +336,4 @@ class AdBlockWebViewClient : WebViewClient() {
 
     private fun JSONArray?.toStringArray(): Array<String> =
         if (this == null) emptyArray() else Array(length()) { index -> optString(index) }
-
-    companion object {
-        /**
-         * Injected into YouTube pages to auto-skip/mute ads.
-         * Strategy:
-         *  1. MutationObserver watches for the skip button and clicks it immediately.
-         *  2. When the player has the `ad-showing` class, fast-forwards the ad video to its end.
-         *  3. Hides ad overlay UI elements via CSS.
-         *  4. Re-runs on YouTube TV's SPA navigation via yt-navigate-finish event.
-         */
-        val YOUTUBE_AD_SKIP_JS = """
-(function(){
-  if(window.__braveAdSkipInstalled) return;
-  window.__braveAdSkipInstalled = true;
-
-  function skipAds(){
-    // 1. Click any visible skip button
-    var skipBtn = document.querySelector('.ytp-skip-ad-button, .ytp-ad-skip-button, [class*="skip-button"]');
-    if(skipBtn && skipBtn.offsetParent !== null){ skipBtn.click(); }
-
-    // 2. Fast-forward in-stream ad videos
-    var player = document.querySelector('.html5-main-video, video');
-    if(player){
-      var container = player.closest('.html5-video-player') || document.getElementById('movie_player');
-      var isAd = (container && (container.classList.contains('ad-showing') || container.classList.contains('ad-interrupting')))
-                 || (player.duration > 0 && player.currentTime === 0 && document.querySelector('.ytp-ad-player-overlay'));
-      if(isAd && isFinite(player.duration) && player.duration > 0){
-        player.currentTime = player.duration;
-      }
-    }
-
-    // 3. Hide ad UI overlays
-    var adSelectors = [
-      '.ytp-ad-overlay-container',
-      '.ytp-ad-text-overlay',
-      '.ytp-ad-player-overlay-instream-info',
-      '#player-ads',
-      '.ytd-banner-promo-renderer',
-      'ytd-action-companion-ad-renderer',
-      'ytd-display-ad-renderer',
-      'ytd-promoted-sparkles-web-renderer',
-      '.ytp-ce-element'
-    ];
-    adSelectors.forEach(function(sel){
-      document.querySelectorAll(sel).forEach(function(el){ el.style.setProperty('display','none','important'); });
-    });
-  }
-
-  // Run immediately
-  skipAds();
-
-  // Watch DOM for dynamically injected ads
-  var observer = new MutationObserver(function(){ skipAds(); });
-  observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
-
-  // Also poll every 300ms (YouTube TV uses shadow DOM — MutationObserver can miss events)
-  setInterval(skipAds, 300);
-
-  // Re-attach on YouTube TV SPA navigation
-  window.addEventListener('yt-navigate-finish', function(){ skipAds(); });
-})()
-""".trimIndent()
-    }
 }
-
