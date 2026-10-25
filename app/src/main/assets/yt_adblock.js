@@ -110,9 +110,24 @@
       var skip = document.querySelector('.ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-ad-skip-button-modern');
       if (skip && skip.offsetParent !== null) skip.click();
     }
+    return !!adShowing;
   }
-  // 1 second is plenty for skipping. A faster timer is what made scrolling and playback stutter.
-  setInterval(skipFallback, 1000);
+  // Poll quickly while a video starts or an ad is showing, then slow down for normal playback.
+  var fastPollUntil = Date.now() + 5000;
+  function markVideoStart(event) {
+    var target = event.target;
+    if (target && target.tagName === 'VIDEO') fastPollUntil = Date.now() + 5000;
+  }
+  document.addEventListener('loadstart', markVideoStart, true);
+  document.addEventListener('playing', markVideoStart, true);
+  (function pollForAds() {
+    var adShowing = skipFallback();
+    var video = document.querySelector('video');
+    var normalPlayback = video && !video.paused && video.readyState >= 2 && !adShowing;
+    if (normalPlayback) fastPollUntil = 0;
+    var fastPolling = adShowing || Date.now() < fastPollUntil;
+    setTimeout(pollForAds, fastPolling ? 300 : 1000);
+  })();
 
   // Hide ad overlays with one CSS rule. No polling, no DOM observer.
   var HIDE_CSS = [

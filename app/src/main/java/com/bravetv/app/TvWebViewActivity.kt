@@ -46,9 +46,6 @@ class TvWebViewActivity : ComponentActivity() {
             settings.cacheMode = WebSettings.LOAD_DEFAULT
             settings.userAgentString = TV_USER_AGENT
             settings.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
-            settings.loadWithOverviewMode = true
-            settings.useWideViewPort = true
-            setInitialScale(100)
             val cookieManager = android.webkit.CookieManager.getInstance()
             cookieManager.setAcceptCookie(true)
             cookieManager.setAcceptThirdPartyCookies(this, true)
@@ -228,6 +225,7 @@ class TvWebViewActivity : ComponentActivity() {
          * Tizen Back code 10009 instead; if Back does nothing on your TV, try changing this to 10009.
          */
         const val BACK_KEY_CODE = 27
-        const val TV_USER_AGENT = "Mozilla/5.0 (Linux; Android 11; Android TV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"    }
+        const val TV_USER_AGENT = "Mozilla/5.0 (SmartHub; SMART-TV; U; Linux; Tizen 6.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.93 TV Safari/537.36"
+    }
 }
 
