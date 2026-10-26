@@ -1,4 +1,4 @@
-package com.bravetv.app
+package com.nevermore.app
 
 import android.os.Bundle
 import android.view.KeyEvent
@@ -20,6 +20,7 @@ class TvWebViewActivity : ComponentActivity() {
     // Holds the custom view shown during fullscreen video playback (e.g. YouTube TV player)
     private var fullscreenView: View? = null
     private var fullscreenCallback: WebChromeClient.CustomViewCallback? = null
+    private var chromeClient: WebChromeClient? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -51,7 +52,7 @@ class TvWebViewActivity : ComponentActivity() {
             cookieManager.setAcceptThirdPartyCookies(this, true)
 
             // Full WebChromeClient so YouTube TV fullscreen video doesn't black-screen/crash
-            webChromeClient = object : WebChromeClient() {
+            val client = object : WebChromeClient() {
                 override fun onShowCustomView(view: View, callback: CustomViewCallback) {
                     // Hide the WebView, show the fullscreen video surface
                     fullscreenCallback?.onCustomViewHidden()
@@ -77,6 +78,8 @@ class TvWebViewActivity : ComponentActivity() {
                     hideSystemUi()
                 }
             }
+            chromeClient = client
+            webChromeClient = client
 
             webViewClient = AdBlockWebViewClient()
             isFocusable = true
@@ -175,7 +178,7 @@ class TvWebViewActivity : ComponentActivity() {
     private fun handleBack() {
         // 1. A fullscreen video surface is showing: dismiss it first.
         if (fullscreenView != null) {
-            (webView.webChromeClient as? WebChromeClient)?.onHideCustomView()
+            chromeClient?.onHideCustomView()
             return
         }
         // 2. YouTube TV is a single-page app that pushes a browser-history entry for almost every

@@ -1,5 +1,5 @@
-﻿#ifndef BRAVETV_ADBLOCK_JNI_H
-#define BRAVETV_ADBLOCK_JNI_H
+#ifndef NEVERMORE_ADBLOCK_JNI_H
+#define NEVERMORE_ADBLOCK_JNI_H
 
 #include <stdint.h>
 
@@ -8,10 +8,10 @@ extern "C" {
 #endif
 
 /* Rules are plain filter text or JSON list objects; resources_json is an adblock-rust Resource array. */
-void *bravetv_adblock_create_engine(const char *filter_rules, const char *resources_json);
+void *nevermore_adblock_create_engine(const char *filter_rules, const char *resources_json);
 
 /* Returns 1 if blocked, 0 otherwise. All string arguments must be NUL-terminated UTF-8. */
-int32_t bravetv_adblock_should_block(
+int32_t nevermore_adblock_should_block(
     void *engine,
     const char *url,
     const char *source_url,
@@ -21,4 +21,4 @@ int32_t bravetv_adblock_should_block(
 }
 #endif
 
-#endif /* BRAVETV_ADBLOCK_JNI_H */
+#endif /* NEVERMORE_ADBLOCK_JNI_H */

@@ -47,11 +47,11 @@ The release APK is **unsigned**. Sign it with your own keystore before installin
    ```bash
    adb connect <TV_IP_ADDRESS>:5555
    adb install -r app/build/outputs/apk/debug/app-debug.apk
-   adb shell am start -n com.bravetv.app/.MainActivity
+   adb shell am start -n com.nevermore.app/.MainActivity
    ```
 3. If something looks stale after an update, uninstall first so cached filter lists and scripts are cleared:
    ```bash
-   adb uninstall com.bravetv.app
+   adb uninstall com.nevermore.app
    ```
 
 ## Which CPU does my TV use?
@@ -83,7 +83,7 @@ You only need this when you change code in `native/`.
    ```
 4. Rebuild the app. In logcat you should see `Native library load: success=true`.
 
-> ⚠️ **JNI names are tied to the package.** The functions in `native/src/lib.rs` are named `Java_com_bravetv_app_BraveEngine_*`. If you rename the Kotlin package or the `BraveEngine` class, rename the functions to match **and rebuild every ABI**, or the library will fail to load and ad blocking will silently turn off.
+> ⚠️ **JNI names are tied to the package.** The functions in `native/src/lib.rs` are named `Java_com_nevermore_app_BraveEngine_*`. If you rename the Kotlin package or the `BraveEngine` class, rename the functions to match **and rebuild every ABI**, or the library will fail to load and ad blocking will silently turn off.
 
 ## Continuous integration
 

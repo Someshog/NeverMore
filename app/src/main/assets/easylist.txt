@@ -1,4 +1,4 @@
-! EasyList Baseline Rules for Brave TV
+! EasyList Baseline Rules for NeverMore
 ||doubleclick.net^
 ||googlesyndication.com^
 ||googleadservices.com^

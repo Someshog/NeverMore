@@ -8,6 +8,7 @@
     <application
         android:allowBackup="false"
         android:label="NeverMore"
+        android:icon="@drawable/tv_banner"
         android:banner="@drawable/tv_banner"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.NoActionBar"
@@ -27,6 +28,7 @@
             android:screenOrientation="landscape">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
         </activity>

@@ -14,7 +14,7 @@ adb logcat -s NeverMore BraveEngine
 4. **YouTube may have changed something.** Ads that return after working for a while usually mean a renamed field. Please [open an issue](https://github.com/Someshog/NeverMore/issues/new/choose) with logcat output captured while an ad plays.
 5. **Try a clean install.** Cached lists and scripts can go stale:
    ```bash
-   adb uninstall com.bravetv.app
+   adb uninstall com.nevermore.app
    adb install app/build/outputs/apk/debug/app-debug.apk
    ```
 

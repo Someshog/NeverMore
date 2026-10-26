@@ -5,10 +5,10 @@ plugins {
 }
 
 android {
-    namespace = "com.bravetv.app"
+    namespace = "com.nevermore.app"
     compileSdk = 35
     defaultConfig {
-        applicationId = "com.bravetv.app"
+        applicationId = "com.nevermore.app"
         minSdk = 23
         targetSdk = 35
         versionCode = 1

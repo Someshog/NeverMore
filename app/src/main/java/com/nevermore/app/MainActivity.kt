@@ -1,4 +1,4 @@
-package com.bravetv.app
+package com.nevermore.app
 
 import android.content.Intent
 import android.os.Bundle
@@ -51,8 +51,6 @@ private data class Service(val name: String, val url: String, val color: Color)
 private fun HomeScreen(onOpen: (String, String) -> Unit) {
     val services = listOf(
         Service("YouTube TV", "https://www.youtube.com/tv", Color(0xFF20232B)),
-        // Service("JioHotstar", "https://www.hotstar.com/in", Color(0xFF151947)),
-        // Service("Twitch", "https://www.twitch.tv", Color(0xFF6441A5))
     )
     Column(
         modifier = Modifier.fillMaxSize().background(Color(0xFF10131A)).padding(horizontal = 72.dp, vertical = 48.dp),

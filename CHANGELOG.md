@@ -12,7 +12,7 @@ All notable changes to NeverMore are documented here. The format is based on [Ke
 - GitHub issue and pull request templates, and a build workflow.
 
 ### Changed
-- Renamed the project to **NeverMore** (the internal package `com.bravetv.app` is unchanged for now, because the native library depends on it).
+- Renamed the project to **NeverMore** (the internal package `com.nevermore.app` is unchanged for now, because the native library depends on it).
 - Added the `androidx.webkit` dependency.
 
 ## [1.0.0] - 2026

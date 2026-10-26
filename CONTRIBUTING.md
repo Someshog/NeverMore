@@ -61,7 +61,7 @@ Add a blank line and more detail if the *why* isn't obvious.
 
 ### Important: the native library and package name
 
-The Rust library's JNI function names include the Kotlin package and class (`Java_com_bravetv_app_BraveEngine_*`). If you rename either, you must update `native/src/lib.rs` **and rebuild all `.so` files**, or ad blocking will silently stop working. Include the rebuilt libraries in the same pull request.
+The Rust library's JNI function names include the Kotlin package and class (`Java_com_nevermore_app_BraveEngine_*`). If you rename either, you must update `native/src/lib.rs` **and rebuild all `.so` files**, or ad blocking will silently stop working. Include the rebuilt libraries in the same pull request.
 
 ## Updating the YouTube ad pruning
 

@@ -45,7 +45,7 @@ struct EngineHandle {
 /// `filter_rules` (or `rules`) and an optional `permission_mask`. `resources_json` accepts the
 /// serialized `Vec<adblock::resources::Resource>` format produced by Brave's resource package.
 #[no_mangle]
-pub extern "C" fn bravetv_adblock_create_engine(
+pub extern "C" fn nevermore_adblock_create_engine(
     filter_rules: *const c_char,
     resources_json: *const c_char,
 ) -> *mut c_void {
@@ -215,10 +215,10 @@ fn java_string_array(env: &mut JNIEnv, array: &JObjectArray) -> Vec<String> {
 /// Returns 1 when blocked, otherwise 0.
 ///
 /// # Safety
-/// `handle` must be a live handle returned by `bravetv_adblock_create_engine`; all strings
+/// `handle` must be a live handle returned by `nevermore_adblock_create_engine`; all strings
 /// must point to valid NUL-terminated UTF-8 strings.
 #[no_mangle]
-pub unsafe extern "C" fn bravetv_adblock_should_block(
+pub unsafe extern "C" fn nevermore_adblock_should_block(
     handle: *mut c_void,
     url: *const c_char,
     source_url: *const c_char,
@@ -254,7 +254,7 @@ pub unsafe extern "C" fn bravetv_adblock_should_block(
 
 /// Returns page-specific cosmetic CSS and scriptlets as executable JavaScript.
 #[no_mangle]
-pub extern "system" fn Java_com_bravetv_app_BraveEngine_getCosmeticResources(
+pub extern "system" fn Java_com_nevermore_app_BraveEngine_getCosmeticResources(
     mut env: JNIEnv,
     _class: JClass,
     handle: jlong,
@@ -290,7 +290,7 @@ pub extern "system" fn Java_com_bravetv_app_BraveEngine_getCosmeticResources(
 
 /// Returns applicable generic selectors for the classes and IDs currently on a page.
 #[no_mangle]
-pub extern "system" fn Java_com_bravetv_app_BraveEngine_getGenericCosmeticSelectors(
+pub extern "system" fn Java_com_nevermore_app_BraveEngine_getGenericCosmeticSelectors(
     mut env: JNIEnv,
     _class: JClass,
     handle: jlong,
@@ -331,7 +331,7 @@ pub extern "system" fn Java_com_bravetv_app_BraveEngine_getGenericCosmeticSelect
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_bravetv_app_BraveEngine_createEngine(
+pub extern "system" fn Java_com_nevermore_app_BraveEngine_createEngine(
     mut env: JNIEnv,
     _class: JClass,
     filter_rules: JString,
@@ -347,11 +347,11 @@ pub extern "system" fn Java_com_bravetv_app_BraveEngine_createEngine(
         .unwrap_or_default();
     let rules = CString::new(rules).unwrap_or_default();
     let resources = CString::new(resources).unwrap_or_default();
-    bravetv_adblock_create_engine(rules.as_ptr(), resources.as_ptr()) as jlong
+    nevermore_adblock_create_engine(rules.as_ptr(), resources.as_ptr()) as jlong
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_bravetv_app_BraveEngine_shouldBlock(
+pub extern "system" fn Java_com_nevermore_app_BraveEngine_shouldBlock(
     mut env: JNIEnv,
     _class: JClass,
     handle: jlong,
@@ -377,7 +377,7 @@ pub extern "system" fn Java_com_bravetv_app_BraveEngine_shouldBlock(
         return 0;
     };
     unsafe {
-        bravetv_adblock_should_block(
+        nevermore_adblock_should_block(
             handle as *mut c_void,
             url.as_ptr(),
             source_url.as_ptr(),
