@@ -17,8 +17,9 @@ This page explains how NeverMore is put together and why ad blocking uses severa
 │   • HLS manifest cleaner                               │
 │   • Cosmetic CSS injection                             │
 ├────────────────────────────────────────────────────────┤
-│        yt_adblock.js (injected at document start)      │
-│   • Prunes ad data from fetch / XHR / JSON.parse       │
+│     Document-start scripts (WebViewCompat injected)    │
+│   • yt_adblock.js: prunes ad data from fetch/XHR/JSON  │
+│   • yt_codec.js: blocks software-decoded video codecs  │
 │   • Player-level ad skip fallback                      │
 ├────────────────────────────────────────────────────────┤
 │                     BraveEngine                        │
@@ -33,29 +34,34 @@ This page explains how NeverMore is put together and why ad blocking uses severa
 ## Components
 
 ### `MainActivity`
-A Jetpack Compose for TV launcher with shortcut cards. Choosing a service starts `TvWebViewActivity` with the site's URL.
+A Jetpack Compose for TV launcher displaying TV-optimized service cards (YouTube TV). Launching a card initiates `TvWebViewActivity` with the site's URL.
 
 ### `TvWebViewActivity`
-Hosts the WebView. It configures a smart-TV user agent, handles fullscreen video, D-pad back navigation and media keys, and injects `yt_adblock.js` with `WebViewCompat.addDocumentStartJavaScript` so the script runs **before any page script**.
+Hosts the full-screen WebView:
+- Sets a smart-TV user agent (`Tizen 6.0 SMART-TV`) to load YouTube's 10-foot couch interface.
+- Handles custom fullscreen video view (`WebChromeClient.onShowCustomView`) ensuring no black screens or crash on video expand.
+- Injects `yt_adblock.js` and `yt_codec.js` via `WebViewCompat.addDocumentStartJavaScript` so they execute **before any page scripts or player initializers**.
+- Intercepts D-pad Back key presses: dispatches synthetic Escape/Back events into the page to traverse YouTube TV's internal SPA history, while long-press Back cleanly closes the activity. Media keys (Play/Pause) trigger HTML5 video control.
 
 ### `AdBlockWebViewClient`
-Overrides `shouldInterceptRequest` to look at each request:
+Overrides `shouldInterceptRequest` to inspect every subresource on background threads:
 
-1. YouTube's own ad URLs (`/pagead/`, `/ptracking`, `/api/stats/ads`) and Google ad domains get an empty response.
-2. An **allowlist** protects essentials (`googlevideo.com`, player scripts, thumbnails) from being blocked by mistake.
-3. Everything else is checked against the filter lists through `BraveEngine`.
-4. `.m3u8` playlists are fetched and cleaned of ad-break markers (`#EXT-X-CUE-OUT`, SCTE-35).
-
-After a page loads it also injects cosmetic filters that hide leftover ad elements.
+1. Blocks YouTube ad/tracking endpoints (`/pagead/`, `/ptracking`, `/api/stats/ads`, DoubleClick, Google ad services).
+2. Protects essential stream resources (`googlevideo.com`, `/s/player/`, `generate_204`, thumbnails) from being blocked.
+3. Checks all other requests against active filter rules in `BraveEngine`.
+4. Fetches and cleans `.m3u8` playlists of ad-break cues (`#EXT-X-CUE-OUT`, SCTE-35).
+5. Injects cosmetic CSS selectors post-load to hide leftover visual ad units.
 
 ### `BraveEngine`
-Downloads EasyList, uBlock Origin and Brave lists (cached for 24 hours, with a bundled offline fallback), builds the native engine, and exposes `shouldBlockUrl` and cosmetic filtering. Remote lists are loaded with scriptlet permissions **disabled**.
+Downloads EasyList, uBlock Origin, and Brave lists (cached for 24 hours, with a bundled offline fallback), builds the native engine, and exposes `shouldBlockUrl` and cosmetic filtering. Remote lists are loaded with scriptlet permissions **disabled**.
 
 ### `native/` (Rust)
 A small JNI wrapper around [`adblock-rust`](https://github.com/brave/adblock-rust). The engine runs on a dedicated thread, and the app talks to it through opaque handles.
 
-### `assets/yt_adblock.js`
-Runs in the page before YouTube's code. See below.
+### `assets/yt_adblock.js` & `assets/yt_codec.js`
+Injected before any remote scripts run:
+- `yt_adblock.js`: Prunes ad objects from player data.
+- `yt_codec.js`: Overrides `MediaSource.isTypeSupported` and `HTMLMediaElement.canPlayType` to reject codecs that would trigger laggy software decoding (such as AV1 on hardware lacking hardware decoders), forcing YouTube to deliver hardware-accelerated streams.
 
 ## Why several layers?
 

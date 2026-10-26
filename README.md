@@ -4,7 +4,7 @@
 
 **Open-source, ad-blocking web app launcher for Android TV.**
 
-Open YouTube TV other streaming sites (building) on the big screen with ad and tracker blocking built in, powered by the same filtering engine Brave uses.
+Open YouTube TV on the big screen with ad and tracker blocking built in, powered by the same filtering engine Brave uses.
 
 [![Build](https://github.com/Someshog/NeverMore/actions/workflows/build.yml/badge.svg)](https://github.com/Someshog/NeverMore/actions/workflows/build.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -22,12 +22,14 @@ Open YouTube TV other streaming sites (building) on the big screen with ad and t
 
 ## ✨ Features
 
-- 🛋️ **Built for the couch.** Leanback launcher, D-pad navigation, media-key support, and a smart-TV user agent so sites load their 10-foot interfaces.
+- 🛋️ **Built for the couch.** Leanback launcher, D-pad navigation, media-key support (Play/Pause), and a smart-TV user agent so YouTube loads its 10-foot TV interface.
+- 🎮 **Intuitive TV remote Back button.** Dispatches synthetic navigation events into the page so Back steps backward through YouTube's internal history rather than trapping you. Long-press Back exits to home.
 - ⚡ **Fast native filtering.** Rust bindings to [`adblock-rust`](https://github.com/brave/adblock-rust), with EasyList, uBlock Origin and Brave lists, refreshed daily.
-- 🎯 **Targets in-stream ads.** Strips ad data from YouTube's player responses before the player sees it, with a player-level skip as a backup.
-- 🧹 **Cleaner pages.** Cosmetic filtering hides leftover ad elements.
-- 🛡️ **Safe by default.** An allowlist keeps video streams and player scripts from being blocked by mistake.
-- 🔒 **No accounts, no analytics.** NeverMore doesn't phone home. See [PRIVACY.md](PRIVACY.md).
+- 🎯 **Targets in-stream ads.** Strips ad metadata (`adPlacements`, `playerAds`, `adSlots`) from YouTube API responses before the player initializes, with a player-level skip as backup.
+- 🎬 **Hardware codec optimization.** Injects script overrides to steer YouTube toward hardware-accelerated video codecs, eliminating dropped frames on TVs that lack AV1 hardware decoding.
+- 🧹 **Cleaner pages.** Cosmetic filtering hides leftover ad elements and promotional overlays.
+- 🛡️ **Safe by default.** An allowlist protects video CDN endpoints (`googlevideo.com`) and player scripts from being blocked.
+- 🔒 **No accounts, no analytics.** NeverMore doesn't track you or phone home. See [PRIVACY.md](PRIVACY.md).
 - 📦 **Wide device support.** Prebuilt native libraries for `armeabi-v7a`, `arm64-v8a`, `x86` and `x86_64`.
 
 ## 🚀 Quick start
@@ -57,16 +59,17 @@ The APK is written to `app/build/outputs/apk/debug/app-debug.apk`. Requirements 
 
 ## 🔍 How it works
 
-NeverMore blocks ads in layers, because no single technique is enough:
+NeverMore blocks ads and optimizes playback in layers, because no single technique is enough:
 
 | Layer | What it does |
 |---|---|
-| **Network filtering** | Checks each request against filter lists and blocks ad and tracker hosts, including YouTube's own ad endpoints. |
-| **Ad data pruning** | A script injected before the page loads removes `adPlacements`, `playerAds` and `adSlots` from API responses, so the player has no ads to play. |
-| **Player fallback** | If an ad still reaches the player, it is muted, skipped to the end, and any skip button is clicked. |
-| **Stream allowlist** | Protects video CDN traffic and player scripts so playback doesn't stall. |
-| **HLS cleaner** | Removes ad-break markers from `.m3u8` playlists on other sites. |
-| **Cosmetic filtering** | Hides leftover ad elements with CSS. |
+| **Network filtering** | Checks each request against filter lists and blocks ad and tracker hosts, including YouTube's own ad endpoints (`/pagead/`, `/ptracking`). |
+| **Ad data pruning** | A script (`yt_adblock.js`) injected at document start removes `adPlacements`, `playerAds` and `adSlots` from API responses so the player has no ads to play. |
+| **Hardware codec routing** | A script (`yt_codec.js`) injected at document start blocks software-decoded video codecs (e.g. AV1 on low-end TV processors) to ensure smooth playback. |
+| **Player fallback** | If an ad still reaches the player, it is muted, skipped to the end, and any skip button is triggered. |
+| **Stream allowlist** | Protects video CDN traffic (`googlevideo.com`) and player scripts so playback doesn't stall. |
+| **HLS cleaner** | Removes ad-break markers from `.m3u8` playlists on streaming sites. |
+| **Cosmetic filtering** | Hides leftover ad elements and banners with injected CSS. |
 
 A deeper explanation is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 

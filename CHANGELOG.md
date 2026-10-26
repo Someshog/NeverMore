@@ -2,31 +2,24 @@
 
 All notable changes to NeverMore are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project aims to follow [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.0.0] - 2026-10-27
 
 ### Added
-- `yt_adblock.js`: removes ad data (`adPlacements`, `playerAds`, `adSlots`) from YouTube API responses, injected at document start, with a player-level skip fallback.
-- Blocking of YouTube's own ad endpoints and Google ad domains.
-- Prebuilt native library for `armeabi-v7a` (32-bit ARM TVs and streaming sticks).
-- Documentation: architecture, building and troubleshooting guides, contributing guide, code of conduct, security policy, privacy policy, disclaimer and third-party notices.
-- GitHub issue and pull request templates, and a build workflow.
+- **Android TV Launcher**: Leanback UI built with Jetpack Compose for TV with YouTube TV shortcut.
+- **Dedicated 10-Foot WebView**: Configured with smart-TV user agent (Tizen/SmartHub) for the YouTube TV interface, full D-pad navigation, and media key support (Play/Pause).
+- **Remote Navigation Handling**: Back button sends synthetic Back event to the web page to navigate YouTube TV's single-page app history cleanly without trapping the user. Long-press Back exits the application.
+- **Multi-Layered Ad Blocking**:
+  - **Native Filter Engine**: Powered by Brave's `adblock-rust` compiled via JNI for `arm64-v8a`, `armeabi-v7a`, `x86`, and `x86_64`.
+  - **Filter Lists**: EasyList, uBlock Origin filters, Brave specific, and Brave unbreak lists, cached for 24 hours with local offline fallback.
+  - **Document-Start Script Injection**: `yt_adblock.js` injected via `WebViewCompat.addDocumentStartJavaScript` to prune ad metadata (`adPlacements`, `playerAds`, `adSlots`) from YouTube API responses (`fetch`, `XMLHttpRequest`, `JSON.parse`) before the player loads.
+  - **Player Fallback**: In-player ad detection that mutes, fast-forwards, and triggers skip on lingering ads.
+  - **Network Interception**: Blocks YouTube tracking and ad endpoints (`/pagead/`, `/ptracking`, `/api/stats/ads`, DoubleClick, Google Ad Services).
+  - **Stream Protection Allowlist**: Safe-lists critical playback infrastructure (`googlevideo.com`, `/s/player/`, `generate_204`, thumbnails) to prevent playback stalls.
+  - **Cosmetic Filtering**: Dynamic CSS injection hiding lingering ad containers and promotional overlays.
+  - **HLS Playlist Cleaner**: Sanitizes `.m3u8` streams by stripping ad cues (`#EXT-X-CUE-OUT`, SCTE-35).
+- **Hardware Codec Optimization**: `yt_codec.js` overrides `MediaSource.isTypeSupported` and `canPlayType` to steer YouTube away from software-decoded formats (like AV1 on unsupported TVs) to smooth hardware-accelerated playback.
+- **Robust Fullscreen & System UI**: `WebChromeClient.onShowCustomView` implementation with sticky immersive mode to prevent black-screen video playback issues.
+- **Comprehensive Project Docs**: Architecture, building, troubleshooting guides, contributing guidelines, security policy, privacy statement, and legal disclaimer.
+- **CI/CD Workflow**: GitHub Actions build workflow for automated debug APK compilation.
 
-### Changed
-- Renamed the project to **NeverMore** (the internal package `com.nevermore.app` is unchanged for now, because the native library depends on it).
-- Added the `androidx.webkit` dependency.
-
-## [1.0.0] - 2026
-
-### Added
-- Android TV launcher with YouTube TV, JioHotstar and Twitch shortcuts.
-- WebView container with D-pad and media-key support.
-- Native ad-block engine using `adblock-rust` with EasyList, uBlock Origin and Brave filter lists.
-- HLS manifest cleaner for ad-break markers.
-- Cosmetic filtering.
-
-[Unreleased]: https://github.com/Someshog/NeverMore/compare/v1.0.0...HEAD
 [1.0.0]: https://github.com/Someshog/NeverMore/releases/tag/v1.0.0
-
-### Fixed
-- Back button on YouTube TV now goes back one screen instead of taking many presses.
-  Long-press Back exits the app. Tested on a Xiaomi TV (Back key code 27).
