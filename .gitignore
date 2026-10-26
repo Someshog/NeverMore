@@ -62,3 +62,6 @@ Thumbs.db
 native/target/
 native/**/target/
 native/.cargo/config.toml.local
+
+# Gradle download cache (never commit)
+.gradle-cache/
