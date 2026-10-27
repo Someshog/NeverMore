@@ -47,6 +47,12 @@ class TvWebViewActivity : ComponentActivity() {
             settings.cacheMode = WebSettings.LOAD_DEFAULT
             settings.userAgentString = TV_USER_AGENT
             settings.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+            
+            // Add these to normalize viewport handling:
+            settings.useWideViewPort = true
+            settings.loadWithOverviewMode = true
+            settings.setSupportZoom(false)
+
             val cookieManager = android.webkit.CookieManager.getInstance()
             cookieManager.setAcceptCookie(true)
             cookieManager.setAcceptThirdPartyCookies(this, true)
