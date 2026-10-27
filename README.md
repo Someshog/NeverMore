@@ -34,16 +34,52 @@ Open YouTube TV on the big screen with ad and tracker blocking built in, powered
 
 ## 🚀 Quick start
 
-### Install a prebuilt APK
+### Install on your TV (no computer needed)
 
-1. Download the latest APK from the [Releases](https://github.com/Someshog/NeverMore/releases) page.
-2. Enable **Developer options → USB/Network debugging** on your TV.
-3. Install it:
-   ```bash
-   adb connect <TV_IP_ADDRESS>:5555
-   adb install -r NeverMore.apk
-   ```
-4. Open **NeverMore** from your TV's app row.
+You need your **phone** and your **TV**, both on the **same Wi-Fi network**. It takes about five minutes.
+
+**Step 1. Download the app on your phone.**
+Open the [Releases page](https://github.com/Someshog/NeverMore/releases/latest) on your phone. Under **Assets**, tap `NeverMore-v1.0.0.apk` (the name ends in `.apk`) to download it.
+
+**Step 2. Get LocalSend on both devices.**
+[LocalSend](https://localsend.org) is a free, open-source app that sends files over your Wi-Fi. Install it on your **phone** and on your **TV** from their app stores, then open it on both.
+
+**Step 3. Send the APK to the TV.**
+In LocalSend on your phone, tap **Select file** and choose the `NeverMore` APK. Your TV appears in the list of nearby devices. Tap it, then **accept** the file on the TV.
+
+**Step 4. Let your TV install apps from outside the store.**
+This is a one-time setting. On the TV, open **Settings** and look for **Install unknown apps** (it may be under *Apps → Security & restrictions*, depending on your TV). Allow it for the app you will use to open the file (LocalSend or your file manager).
+
+**Step 5. Install it.**
+On the TV, open the file you just received (in LocalSend's received files, or in a file manager under *Downloads*). Select it, then choose **Install**. If a Play Protect message appears, choose **Install anyway**.
+
+**Step 6. Open NeverMore.**
+Find **NeverMore** in your TV's app row and start watching.
+
+<details>
+<summary><b>Something not working?</b></summary>
+
+| Problem | What to try |
+|---|---|
+| The TV doesn't show up in LocalSend | Make sure the phone and TV are on the same Wi-Fi. Guest networks and some routers block device-to-device traffic, so try the other Wi-Fi band or a different network. |
+| "Install blocked" or nothing happens when you open the file | Repeat Step 4 for the app you used to open the file. |
+| "App not installed" | Remove any older copy (including the old BraveTV build) in *Settings → Apps*, then install again. |
+| The file won't open on the TV | Install a file manager from the TV's app store, such as **Files by Google**, and open the APK from *Downloads*. |
+
+</details>
+
+**Other ways to install**
+
+- **Downloader app.** Install **Downloader** (by AFTVnews) on the TV, allow it to install unknown apps, and enter the APK link from the [Releases page](https://github.com/Someshog/NeverMore/releases/latest).
+- **USB stick.** Copy the APK to a USB drive, plug it into the TV, and open it with a file manager.
+- **ADB (advanced).** Turn on **Developer options → Network debugging** on your TV, then run:
+  ```bash
+  adb connect <TV_IP_ADDRESS>:5555
+  adb install -r NeverMore-v1.0.0.apk
+  adb shell am start -n com.nevermore.app/.MainActivity
+  ```
+
+**Updating:** download the new APK and install it the same way. Your settings are kept.
 
 ### Build from source
 
